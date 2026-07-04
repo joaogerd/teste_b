@@ -1,0 +1,60 @@
+project:
+  name: mpas-bmatrix-global
+  project_root: /p/projetos/monan_das/joao.gerd/projects/mpas-bmatrix-global
+  data_root: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global
+  work_root: /p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global
+
+environment:
+  loader: scripts/load_jaci_env.sh
+
+install:
+  root: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas
+  mpas_init: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpas_init_atmosphere
+  mpas_atmosphere: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpas_atmosphere
+  init_share: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/share/MPAS/core_init_atmosphere
+  atmosphere_share: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/share/MPAS/core_atmosphere
+
+mesh:
+  name: x1.10242
+  grid: /p/projetos/monan_das/joao.gerd/projects/mpas_meshes/quasi_uniform/x1.10242_240km/mesh/x1.10242.grid.nc
+  graph: /p/projetos/monan_das/joao.gerd/projects/mpas_meshes/quasi_uniform/x1.10242_240km/graph/x1.10242.graph.info
+  partitions_dir: /p/projetos/monan_das/joao.gerd/projects/mpas_meshes/quasi_uniform/x1.10242_240km/partitions
+  nproc: 128
+  nvertlevels: 55
+
+static:
+  invariant: /p/projetos/monan_das/joao.gerd/external-inputs/mpasjedi_tutorial202509NCAR/MPAS_namelist_stream_physics_files/x1.10242.invariant.nc
+  tutorial_physics_files: /p/projetos/monan_das/joao.gerd/external-inputs/mpasjedi_tutorial202509NCAR/MPAS_namelist_stream_physics_files
+  geovars: /p/projetos/monan_das/joao.gerd/projects/MONAN-JEDI/mpas-jedi/test/testinput/namelists/geovars.yaml
+  keptvars: /p/projetos/monan_das/joao.gerd/projects/MONAN-JEDI/mpas-jedi/test/testinput/namelists/keptvars.yaml
+
+# Parâmetros científicos, variáveis de controle e convenções code<->file
+# ficam isolados no arquivo abaixo. Assim, mudanças na B não exigem editar Python.
+bmatrix:
+  configuration: bmatrix-x1.10242.yaml
+
+wps:
+  root: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/external/WPS/WPS-4.6.0
+  ungrib_exe: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/external/WPS/WPS-4.6.0/ungrib.exe
+  link_grib: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/external/WPS/WPS-4.6.0/link_grib.csh
+  vtable_gfs: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/external/WPS/WPS-4.6.0/ungrib/Variable_Tables/Vtable.GFS
+
+pbs:
+  queue: pesqmini
+  queues:
+    forecast: pesqmidi
+    bmatrix: pesqmidi
+  nproc: 128
+  walltime:
+    init: "00:10:00"
+    forecast:
+      f024: "01:00:00"
+      f048: "02:00:00"
+      default: "02:00:00"
+    bmatrix: "02:00:00"
+  walltime_short: "00:10:00"
+  walltime_long: "02:00:00"
+
+runtime:
+  config_dt: 60
+  output_interval: "24:00:00"

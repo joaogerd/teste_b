@@ -1,0 +1,40 @@
+# Runtime logs
+logs/
+*.log
+*.out
+*.err
+*.OU
+*.ER
+*.pbs-*
+
+# Local/runtime data
+data/
+work/
+runs/
+forecasts/
+perturbations/
+bmatrix/
+
+# Large model files
+*.nc
+*.grib
+*.grb
+*.grib2
+*.idx
+
+# Python/cache/editor
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Python package build metadata
+*.egg-info/
+__pycache__/
+*.py[cod]

@@ -1,0 +1,40 @@
+name: mpaswf
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pip
+
+  # Dependências Python principais
+  - pyyaml>=6.0
+  - numpy>=1.24
+  - netcdf4>=1.6
+  - cftime>=1.6
+  - xarray>=2024.1
+
+  # Bibliotecas binárias usadas por netCDF4/xarray e pesos ESMF
+  - libnetcdf
+  - hdf5
+
+  # Backend Python para BFLOW u/v -> psi/chi
+  # windspharm depende de pyspharm, que deve ser instalado por conda-forge
+  # para evitar compilação via pip em cada instituição/cluster.
+  - windspharm>=2.0
+  - pyspharm>=1.0.9
+
+  # Geração Python dos pesos ESMF: xESMF usa ESMPy/ESMF e UXarray
+  # normaliza a topologia nativa MPAS para UGRID.
+  - esmpy
+  - xesmf>=0.9
+  - uxarray>=2025.0
+
+  # Desenvolvimento
+  - pytest
+  - ruff
+
+  # Instala o pacote local em modo editável. As dependências científicas
+  # compiladas acima são resolvidas pelo conda, não pelo pip.
+  - pip:
+      - -e .

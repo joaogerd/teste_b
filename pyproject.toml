@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mpas-bmatrix-global"
+version = "0.2.0"
+description = "Single-command workflow for MPAS-JEDI/SABER static B-matrix products"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "João Gerd Zell de Mattos" }]
+license = { text = "MIT" }
+dependencies = [
+  "PyYAML>=6.0",
+  "numpy>=1.24",
+  "netCDF4>=1.6",
+  "cftime>=1.6",
+  "xarray>=2024.1",
+]
+
+[project.optional-dependencies]
+weights = ["esmpy"]
+bflow = ["windspharm>=2.0"]
+diagnostics = ["matplotlib>=3.8"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+mpas-bmatrix = "bmatrix.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

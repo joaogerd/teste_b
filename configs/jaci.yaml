@@ -1,0 +1,72 @@
+project:
+  root: /p/projetos/monan_das/joao.gerd/projects/mpas-bmatrix-global
+  work_root: /p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global
+  data_root: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global
+
+environment:
+  stack_root: /p/projetos/monan_das/joao.gerd/work/spack-stack-inpe-overlay-20260515T181917Z/spack-stack
+  stack_env_name: jaci-mpas-jedi-gcc12-craympich
+  stack_module_root: /p/projetos/monan_das/joao.gerd/work/spack-stack-inpe-overlay-20260515T181917Z/spack-stack/envs/jaci-mpas-jedi-gcc12-craympich/modules
+  stack_site_setup: configs/sites/tier2/jaci/setup.sh
+  stack_env_module: cray-mpich/8.1.31/none/none/jedi-mpas-env/1.0.0
+
+monan_jedi:
+  source: /p/projetos/monan_das/joao.gerd/projects/MONAN-JEDI
+
+  # Diretório de build usado para consultar CMakeCache.txt.
+  # Ajuste este caminho quando a compilação OFF final estiver consolidada.
+  build_dir: /p/projetos/monan_das/joao.gerd/work/MONAN-JEDI/build
+
+  # Instalação operacional usada para rodar MPAS/JEDI.
+  install_root: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas
+
+mpas:
+  double_precision: OFF
+
+  init_atmosphere_model: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpas_init_atmosphere
+  atmosphere_model: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpas_atmosphere
+  build_tables: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpas_atmosphere_build_tables
+
+  share_root: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/share/MPAS
+  core_atmosphere_share: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/share/MPAS/core_atmosphere
+  core_init_atmosphere_share: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/share/MPAS/core_init_atmosphere
+
+jedi:
+  toolbox: /p/projetos/monan_das/joao.gerd/builds/monan-jedi-mpas/bin/mpasjedi_error_covariance_toolbox.x
+
+mesh:
+  name: x1.10242
+  resolution_label: 240km
+  grid: /p/projetos/monan_das/joao.gerd/projects/mpas_meshes/quasi_uniform/x1.10242_240km/mesh/x1.10242.grid.nc
+  graph: /p/projetos/monan_das/joao.gerd/projects/mpas_meshes/quasi_uniform/x1.10242_240km/graph/x1.10242.graph.info
+  nproc: 64
+
+dates:
+  first_cycle: 2025100100
+  last_cycle: 2025100500
+  cycle_interval_hours: 24
+  forecast_hours:
+    - 24
+    - 48
+
+physics:
+  suite: mesoscale_reference
+
+external_data:
+  source: null
+  grib_root: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/grib
+  intermediate_root: /p/projetos/monan_das/joao.gerd/data/mpas-bmatrix-global/intermediate
+  geog_root: null
+
+nmc:
+  method: f48_minus_f24
+  variables:
+    - eastward_wind
+    - northward_wind
+    - air_temperature
+    - water_vapor_mixing_ratio_wrt_moist_air
+    - air_pressure_at_surface
+
+bmatrix:
+  type: univariate
+  use_vertical_balance: false
