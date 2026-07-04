@@ -13,7 +13,6 @@ work/
 runs/
 forecasts/
 perturbations/
-bmatrix/
 
 # Large model files
 *.nc
