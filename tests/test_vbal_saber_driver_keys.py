@@ -5,6 +5,7 @@ import yaml
 from bmatrix.vbal_core.config_files import write_vbal_yaml
 
 
+# The scientific configuration uses snake_case; SABER reads literal labels with spaces.
 def test_vbal_yaml_uses_saber_driver_labels(tmp_path):
     config = {
         "controls": [
