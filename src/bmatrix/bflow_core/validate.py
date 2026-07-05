@@ -8,6 +8,7 @@ import netCDF4
 
 from ..errors import ArtifactError, ConfigurationError
 from .model import BflowPair, compact_time, product_name
+from .netcdf_utils import CDF5_FORMAT
 
 
 def _validation(config: Mapping[str, object]) -> Mapping[str, object]:
@@ -18,10 +19,15 @@ def _validation(config: Mapping[str, object]) -> Mapping[str, object]:
 
 
 def require_vars(path: Path, names: list[str], dimension_checks: Mapping[str, tuple[str, ...]]) -> None:
-    """Require configured variables and optional dimensions in a NetCDF product."""
+    """Require CDF5 format, configured variables and optional dimensions in a BFLOW product."""
     if not path.is_file():
         raise ArtifactError(f"Produto ausente: {path}")
     with netCDF4.Dataset(path) as dataset:
+        if dataset.data_model != CDF5_FORMAT:
+            raise ArtifactError(
+                f"Formato inválido em {path}: {dataset.data_model}; esperado {CDF5_FORMAT}. "
+                "Regere o produto pelo BFLOW."
+            )
         for name in names:
             if name not in dataset.variables:
                 raise ArtifactError(f"Variável ausente em {path}: {name}")
@@ -36,7 +42,7 @@ def require_vars(path: Path, names: list[str], dimension_checks: Mapping[str, tu
 def validate_products(
     config: Mapping[str, object], workspace: str | Path, pairs: list[BflowPair], stage: str
 ) -> None:
-    """Validate FULL or PTB products using the scientific configuration."""
+    """Validate CDF5 FULL or PTB products using the scientific configuration."""
     if stage not in {"full", "ptb"}:
         raise ValueError(f"stage inválido: {stage}")
     validation = _validation(config)
