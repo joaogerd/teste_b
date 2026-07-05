@@ -85,7 +85,10 @@ def write_vbal_yaml(config: Mapping[str, Any], path: str | Path, nmembers: int, 
                     "saber block name": "BUMP_VerticalBalance",
                     "calibration": {
                         "io": {"files prefix": str(vbal.get("files_prefix", "mpas"))},
-                        "drivers": dict(vbal.get("drivers", {})),
+                        "drivers": {
+                            str(key).replace("_", " "): value
+                            for key, value in dict(vbal.get("drivers", {})).items()
+                        },
                         "sampling": dict(vbal.get("sampling", {})),
                         "diagnostics": {"target ensemble size": nmembers},
                         "vertical balance": {
