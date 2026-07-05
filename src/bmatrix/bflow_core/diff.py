@@ -8,13 +8,17 @@ import netCDF4
 import numpy as np
 
 from .model import BflowPair, compact_time, product_name
-from .netcdf_utils import copy_attrs
+from .netcdf_utils import CDF5_FORMAT, copy_attrs
 
 
 def diff_file(f48: Path, f24: Path, output: Path, valid_time: str) -> None:
-    """Write a NetCDF file containing ``f48 - f24`` for common numeric fields."""
+    """Write a CDF5 NetCDF file containing ``f48 - f24`` for common numeric fields."""
     output.unlink(missing_ok=True)
-    with netCDF4.Dataset(f48) as ds48, netCDF4.Dataset(f24) as ds24, netCDF4.Dataset(output, "w") as dst:
+    with (
+        netCDF4.Dataset(f48) as ds48,
+        netCDF4.Dataset(f24) as ds24,
+        netCDF4.Dataset(output, "w", format=CDF5_FORMAT) as dst,
+    ):
         for name, dimension in ds48.dimensions.items():
             dst.createDimension(name, None if dimension.isunlimited() else len(dimension))
         copy_attrs(ds48, dst)
