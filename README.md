@@ -73,6 +73,32 @@ mpas-bmatrix build \
   --to-stage nicas
 ```
 
+## PBS progress display
+
+When the command is running in an interactive terminal, every PBS dependency is
+monitored with a compact colored braille spinner. The row shows the job ID,
+current PBS state, elapsed time, and time until the next `qstat` query.
+
+```text
+⠹ PBS job 289521.pbs-ha: state R elapsed 02:14 next check in 18s
+```
+
+Finished jobs produce a persistent green confirmation before output validation.
+When stdout is redirected, the command writes periodic `[RUN]` lines instead of
+ANSI control characters, preserving readable logs.
+
+Color follows terminal capability by default. Set one of the following values
+when needed:
+
+```bash
+MPAS_BMATRIX_COLOR=always mpas-bmatrix build ...
+MPAS_BMATRIX_COLOR=never mpas-bmatrix build ...
+NO_COLOR=1 mpas-bmatrix build ...
+```
+
+The scheduler query cadence remains controlled by `--poll-seconds`; the spinner
+animates between queries and does not increase scheduler load.
+
 Os pesos ESMF são gerados por ESMPy integrado ao pacote; não há NCL, SCRIP ou
 outro executável de pesos. Cada workspace BFLOW grava
 `ESMF_weights/weights_manifest.json` com checksum e validação dos pesos.
