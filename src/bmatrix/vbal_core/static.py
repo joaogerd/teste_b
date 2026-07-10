@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Mapping
@@ -17,7 +16,10 @@ def write_stream_list_control(config: Mapping[str, object], path: Path) -> None:
 
 
 def stage_samples(config: Mapping[str, object], workspace: Path, samples: list[Sample]) -> str:
-    """Copy BFLOW perturbations into the canonical numbered VBAL sample layout.
+    """Link CDF5 BFLOW perturbations into the canonical numbered VBAL sample layout.
+
+    BFLOW is the sole producer responsible for the CDF5 format.  VBAL only
+    creates deterministic member aliases and must not recode NetCDF products.
 
     Returns
     -------
@@ -30,8 +32,7 @@ def stage_samples(config: Mapping[str, object], workspace: Path, samples: list[S
     for index, sample in enumerate(samples, start=1):
         member = f"{index:03d}"
         destination = samples_dir / f"{stem}_{member}.nc"
-        destination.unlink(missing_ok=True)
-        subprocess.run(["nccopy", "-k", "cdf5", str(sample.ptb), str(destination)], check=True)
+        symlink_force(sample.ptb, destination)
     return stem
 
 

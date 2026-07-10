@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 
+# NetCDF CDF-5 / 64-bit-data format accepted by MPAS PNetCDF streams.
+CDF5_FORMAT = "NETCDF3_64BIT_DATA"
+
+
 def copy_attrs(src, dst, skip: set[str] | None = None) -> None:
     skip = skip or set()
     for attr in src.ncattrs():

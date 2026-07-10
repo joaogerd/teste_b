@@ -7,7 +7,7 @@ from typing import Mapping
 import netCDF4
 
 from ..errors import ArtifactError, ConfigurationError
-from .netcdf_utils import copy_attrs
+from .netcdf_utils import CDF5_FORMAT, copy_attrs
 
 
 def _wind_outputs(config: Mapping[str, object]) -> Mapping[str, object]:
@@ -22,7 +22,7 @@ def _wind_outputs(config: Mapping[str, object]) -> Mapping[str, object]:
 
 
 def generate_template_ptb(config: Mapping[str, object], first_ref: str | Path, workspace: str | Path) -> Path:
-    """Create a template containing only configured psi/chi output variables."""
+    """Create a CDF5 template containing only configured psi/chi output variables."""
     source = Path(first_ref)
     root = Path(workspace)
     products = config["bflow"]["products"]  # type: ignore[index]
@@ -35,7 +35,7 @@ def generate_template_ptb(config: Mapping[str, object], first_ref: str | Path, w
         output.unlink()
 
     outputs = _wind_outputs(config)
-    with netCDF4.Dataset(source) as src, netCDF4.Dataset(output, "w") as dst:
+    with netCDF4.Dataset(source) as src, netCDF4.Dataset(output, "w", format=CDF5_FORMAT) as dst:
         template_name = str(config["bflow"]["wind_transform"].get("template_file_variable", "theta"))  # type: ignore[index]
         if template_name not in src.variables:
             raise ArtifactError(f"Variável template ausente: {template_name} em {source}")

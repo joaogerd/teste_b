@@ -1,4 +1,4 @@
-name: mpaswf
+name: bmatrix
 
 channels:
   - conda-forge
