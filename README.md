@@ -24,6 +24,7 @@ NICAS  -> mpas_nicas.nc, mpas_nicas_local_*, mpas_nicas_grids_local_*,
           mpas.nicas_norm.nc e mpas.dirac_nicas.nc
 SO     -> an.*.nc e obsout_SO_*.h5 (validação com assimilação)
 DIRAC  -> mpas.dirac.nc (resposta da B completa a um impulso)
+PLOTS  -> summary.csv, README.md e figuras PNG de diagnóstico
 ```
 
 A configuração e o layout dos produtos correspondem ao contrato científico
@@ -63,7 +64,7 @@ JEDI/FieldSet ou mecanismo específico.
 O fluxo científico é:
 
 ```text
-BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC
+BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC -> PLOTS
 ```
 
 VBAL calibra os coeficientes da transformação vertical `K2`. UNBALANCE aplica
@@ -78,12 +79,31 @@ CDF5. A reversibilidade foi verificada numericamente por round-trip:
 `K2(K2^-1(PTB_i - mean(PTB))) ~= PTB_i - mean(PTB)` para os quatro membros e
 as cinco variáveis de controle.
 
+## Etapa PLOTS
+
+`PLOTS` é uma etapa local de pós-processamento. Ela não submete PBS e não altera
+os produtos científicos; apenas lê os NetCDF finais, gera `summary.csv`, um
+`README.md` de proveniência e figuras PNG simples.
+
+A saída padrão é determinística a partir do workspace BFLOW:
+
+```text
+${work_root}/bmatrix/plots/<RUN_ID>/
+```
+
+A plotagem usa `lonCell`/`latCell` quando essas coordenadas estão disponíveis e
+cai para gráficos por índice quando o produto não contém coordenadas de malha.
+Assim, a etapa funciona sem Cartopy; `matplotlib` é a única dependência
+diagnóstica adicional.
+
 ## Instalação
 
 ```bash
 python -m pip install -e .
 # geração de pesos e transformação psi/chi exigem dependências compiladas:
 conda install -c conda-forge esmpy windspharm pyspharm
+# plotagem diagnóstica:
+python -m pip install -e ".[diagnostics]"
 ```
 
 ## Uso
@@ -111,6 +131,16 @@ mpas-bmatrix build \
   --config configs/jaci-x1.10242.yaml \
   --manifest /dados/nmc/manifest.tsv \
   --poll-seconds 30
+```
+
+Para produzir também a pós-plotagem no fim do fluxo:
+
+```bash
+mpas-bmatrix build \
+  --config configs/jaci-x1.10242.yaml \
+  --manifest /dados/nmc/manifest.tsv \
+  --to-stage plots \
+  --plot-level 30
 ```
 
 Para produzir somente a B reutilizável, sem o teste SO:
@@ -141,6 +171,16 @@ mpas-bmatrix build \
   --bflow-workspace /caminho/para/workspace-bflow \
   --from-stage unbalance \
   --to-stage hdiag
+```
+
+Gerar apenas figuras e resumos a partir de produtos já concluídos:
+
+```bash
+mpas-bmatrix plots \
+  --config configs/jaci-x1.10242.yaml \
+  --bflow-workspace /caminho/para/workspace-bflow \
+  --plot-level 30 \
+  --plot-dpi 150
 ```
 
 ## PBS progress display
