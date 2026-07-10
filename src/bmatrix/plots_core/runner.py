@@ -218,7 +218,7 @@ def _plot_hdiag_latlev(
         outdir = root / directory
         outdir.mkdir(parents=True, exist_ok=True)
         with ctx.netcdf4.Dataset(path) as dataset:
-            lat = _latitude_for_dataset(dataset, products, ctx)
+            lat = _latitude_for_dataset(dataset, products, ctx=ctx)
             for name in _ordered_plot_variables(dataset.variables, selected):
                 variable = dataset.variables[name]
                 if not _is_numeric_variable(variable, ctx=ctx):
@@ -634,7 +634,6 @@ def _select_plot_values(variable, *, level: int, ctx: PlotContext):
         return values
     if "nCells" in dims and "nVertLevels" in dims:
         level_axis = dims.index("nVertLevels")
-        cell_axis = dims.index("nCells")
         lev = max(0, min(int(level), values.shape[level_axis] - 1))
         values = ctx.np.take(values, indices=lev, axis=level_axis)
         dims = tuple(dim for dim in dims if dim != "nVertLevels")
