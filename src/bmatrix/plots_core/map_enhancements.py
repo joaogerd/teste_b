@@ -8,12 +8,22 @@ fallback still runs.
 """
 from __future__ import annotations
 
+from pathlib import Path
 import warnings
 
 
 CONTOUR_LEVELS = 21
 DIRAC_LOCAL_DLON = 38.0
 DIRAC_LOCAL_DLAT = 28.0
+DIRAC_MIN_SIGNAL = 1.0e-10
+GLOBAL_MIN_RANGE = 1.0e-12
+
+
+# DIRAC response maps already have a dedicated local diagnostic in 05_dirac.
+# Global DIRAC maps are usually dominated by near-zero fields or offsets and are
+# visually misleading, so 06_spatial_fields focuses on spatial diagnostics that
+# make sense globally.
+GLOBAL_SPATIAL_PRODUCTS = ("stddev", "cor_rh", "cor_rv", "nicas_norm")
 
 
 def apply() -> None:
@@ -23,6 +33,7 @@ def apply() -> None:
     runner._finish = _finish
     runner._plot_dirac_spatial = _plot_dirac_spatial
     runner._plot_global_spatial = _plot_global_spatial
+    runner._plot_spatial_fields = _plot_spatial_fields
 
 
 def _cartopy():
@@ -128,9 +139,10 @@ def _plot_dirac_spatial(
         return
 
     display_fields = [_remove_local_baseline(field, local, np) for field in raw_fields]
-    maximum = _robust_abs_limit([field[local] for field in display_fields], np)
-    if maximum <= 0.0:
-        maximum = 1.0
+    local_chunks = [field[local] for field in display_fields]
+    maximum = _robust_abs_limit(local_chunks, np)
+    if maximum < DIRAC_MIN_SIGNAL:
+        return
 
     ccrs, _ = _cartopy()
     has_map = ccrs is not None
@@ -200,7 +212,7 @@ def _plot_dirac_spatial(
                 cmap="coolwarm",
                 transform=None,
             )
-            axis.scatter([0.0], [lat0], marker="x", s=105, color=runner.FG, linewidths=2.2, zorder=3)
+            axis.scatter([0.0], [lat0], marker="x", s=105, color=runner.FG, linewidths=2.2)
             axis.set_xlabel("Longitude relativa ao impulso (°)")
             axis.set_xlim(-dlon, dlon)
             axis.set_ylim(lat0 - dlat, lat0 + dlat)
@@ -222,6 +234,66 @@ def _plot_dirac_spatial(
         va="bottom",
     )
     _finish(fig, output, dpi, ctx)
+
+
+def _plot_spatial_fields(
+    products,
+    root,
+    selected,
+    level: int,
+    dpi: int,
+    ctx,
+) -> list[Path]:
+    """Generate only informative global spatial maps.
+
+    DIRAC products are intentionally omitted here because the local DIRAC response
+    is already generated in ``05_dirac`` and is much easier to interpret.
+    """
+    from . import runner
+
+    outdir = root / "06_spatial_fields"
+    outdir.mkdir(parents=True, exist_ok=True)
+    figures: list[Path] = []
+
+    product_map = {
+        "stddev": products.stddev,
+        "cor_rh": products.cor_rh,
+        "cor_rv": products.cor_rv,
+        "nicas_norm": products.nicas_norm,
+    }
+
+    for product_name in GLOBAL_SPATIAL_PRODUCTS:
+        product_path = Path(product_map[product_name])
+        if not product_path.is_file():
+            continue
+        with ctx.netcdf4.Dataset(product_path) as dataset:
+            for name in runner._ordered_plot_variables(dataset.variables, selected):
+                if name not in dataset.variables:
+                    continue
+                variable = dataset.variables[name]
+                if not runner._is_numeric_variable(variable, ctx=ctx):
+                    continue
+                levels, fields = runner._spatial_levels(variable, level, ctx=ctx)
+                if not fields:
+                    continue
+                for item, field in zip(levels, fields):
+                    values = ctx.np.asarray(field, dtype=float).ravel()
+                    if not _is_informative(values, ctx.np, abs_tol=GLOBAL_MIN_RANGE):
+                        continue
+                    lon, lat = runner._coordinates_for_size(
+                        products,
+                        len(values),
+                        ctx=ctx,
+                        dataset=dataset,
+                    )
+                    if lon is None or lat is None:
+                        continue
+                    level_name = "surface" if item is None else f"lev{item:02d}"
+                    figure = outdir / f"{product_name}_{runner._safe_name(name)}_{level_name}_spatial.png"
+                    _plot_global_spatial(product_name, name, lon, lat, values, item, figure, dpi, ctx)
+                    figures.append(figure)
+
+    return figures
 
 
 def _plot_global_spatial(
@@ -246,6 +318,8 @@ def _plot_global_spatial(
         return
 
     finite_values = values[finite]
+    if not _is_informative(finite_values, np, abs_tol=GLOBAL_MIN_RANGE):
+        return
     vmin, vmax, cmap = _global_limits_and_cmap(finite_values, np)
     norm = ctx.plt.Normalize(vmin=vmin, vmax=vmax)
 
@@ -343,16 +417,31 @@ def _global_limits_and_cmap(values, np):
     return vmin, vmax, "viridis"
 
 
+def _is_informative(values, np, *, abs_tol: float) -> bool:
+    finite = np.asarray(values, dtype=float)
+    finite = finite[np.isfinite(finite)]
+    if finite.size == 0:
+        return False
+    spread = float(np.nanpercentile(finite, 98.0) - np.nanpercentile(finite, 2.0))
+    amplitude = float(np.nanmax(np.abs(finite)))
+    if not np.isfinite(spread) or not np.isfinite(amplitude):
+        return False
+    if amplitude < abs_tol:
+        return False
+    return spread > max(abs_tol, amplitude * 1.0e-8)
+
+
 def _spatial_artist(axis, x, y, values, norm, ctx, *, cmap="coolwarm", transform=None):
     values = ctx.np.asarray(values, dtype=float)
     kwargs = {"transform": transform} if transform is not None else {}
+    levels = ctx.np.linspace(norm.vmin, norm.vmax, CONTOUR_LEVELS)
     if len(values) >= 20:
         try:
             triangulation = ctx.mtri.Triangulation(x, y)
             return axis.tricontourf(
                 triangulation,
                 values,
-                levels=CONTOUR_LEVELS,
+                levels=levels,
                 cmap=cmap,
                 norm=norm,
                 extend="both",
