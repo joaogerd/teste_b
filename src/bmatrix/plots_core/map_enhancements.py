@@ -1,4 +1,4 @@
-"""Optional map-background and color-palette enhancements for B-matrix plotting.
+"""Optional map-background, color-palette and typography enhancements.
 
 This module monkey-patches selected helpers from ``plots_core.runner``. It is
 kept separate so the main plotting stage remains usable without Cartopy; when
@@ -24,6 +24,25 @@ GLOBAL_MIN_RANGE = 1.0e-12
 SCIFIG_SEQUENTIAL = ("#F7FBFF", "#9ECAE1", "#4292C6", "#08519C")
 SCIFIG_DIVERGING = ("#2166AC", "#92C5DE", "#F7F7F7", "#F4A582", "#B2182B")
 
+# Typography and figure styling follow the local nature-figure-style convention,
+# adapted to diagnostic PNGs that need to remain readable on screen and slides.
+FONT_FALLBACKS = ("Arial", "Helvetica", "DejaVu Sans", "Liberation Sans")
+TEXT_COLOR = "#111111"
+MUTED_TEXT = "#4B5563"
+AXIS_COLOR = "#111111"
+MAP_LINE = "#374151"
+MAP_BORDER = "#6B7280"
+GRID_COLOR = "#D7DEE6"
+TITLE_SIZE = 17.0
+PANEL_TITLE_SIZE = 13.5
+AXIS_LABEL_SIZE = 12.0
+TICK_LABEL_SIZE = 10.5
+COLORBAR_LABEL_SIZE = 12.0
+ANNOTATION_SIZE = 8.5
+AXIS_WIDTH = 0.8
+TICK_LENGTH = 3.6
+GRID_WIDTH = 0.55
+
 # DIRAC response maps already have a dedicated local diagnostic in 05_dirac.
 # Global DIRAC maps are usually dominated by near-zero fields or offsets and are
 # visually misleading, so 06_spatial_fields focuses on spatial diagnostics that
@@ -41,11 +60,55 @@ def apply() -> None:
     """Install plotting enhancements on the runner module."""
     from . import runner
 
+    _apply_global_style()
     runner._finish = _finish
     runner._plot_dirac_spatial = _plot_dirac_spatial
     runner._plot_global_spatial = _plot_global_spatial
     runner._plot_spatial_fields = _plot_spatial_fields
     runner._plot_latlev = _plot_latlev
+
+
+def _apply_global_style() -> None:
+    """Apply a Nature-inspired Matplotlib style without adding dependencies."""
+    from matplotlib import rcParams
+
+    rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.sans-serif": list(FONT_FALLBACKS),
+            "font.size": TICK_LABEL_SIZE,
+            "axes.titlesize": PANEL_TITLE_SIZE,
+            "axes.titleweight": "bold",
+            "axes.labelsize": AXIS_LABEL_SIZE,
+            "axes.labelweight": "normal",
+            "axes.linewidth": AXIS_WIDTH,
+            "axes.edgecolor": AXIS_COLOR,
+            "axes.labelcolor": TEXT_COLOR,
+            "axes.facecolor": "white",
+            "axes.grid": False,
+            "xtick.labelsize": TICK_LABEL_SIZE,
+            "ytick.labelsize": TICK_LABEL_SIZE,
+            "xtick.color": TEXT_COLOR,
+            "ytick.color": TEXT_COLOR,
+            "xtick.direction": "out",
+            "ytick.direction": "out",
+            "xtick.major.width": AXIS_WIDTH,
+            "ytick.major.width": AXIS_WIDTH,
+            "xtick.major.size": TICK_LENGTH,
+            "ytick.major.size": TICK_LENGTH,
+            "legend.fontsize": TICK_LABEL_SIZE,
+            "legend.frameon": False,
+            "legend.handlelength": 1.4,
+            "legend.borderaxespad": 0.4,
+            "figure.facecolor": "white",
+            "savefig.facecolor": "white",
+            "savefig.edgecolor": "white",
+            "savefig.transparent": False,
+            "pdf.fonttype": 42,
+            "ps.fonttype": 42,
+            "svg.fonttype": "none",
+        }
+    )
 
 
 def _cartopy():
@@ -67,9 +130,74 @@ def _scifig_cmap(ctx, kind: str):
     return ctx.plt.get_cmap(kind)
 
 
+def _style_axis(axis, *, grid: bool | None = None) -> None:
+    """Style one Matplotlib/Cartopy axis with publication-like typography."""
+    axis.set_facecolor("white")
+    axis.title.set_fontsize(PANEL_TITLE_SIZE)
+    axis.title.set_fontweight("bold")
+    axis.title.set_color(TEXT_COLOR)
+    axis.xaxis.label.set_fontsize(AXIS_LABEL_SIZE)
+    axis.yaxis.label.set_fontsize(AXIS_LABEL_SIZE)
+    axis.xaxis.label.set_color(TEXT_COLOR)
+    axis.yaxis.label.set_color(TEXT_COLOR)
+    axis.tick_params(
+        axis="both",
+        which="major",
+        labelsize=TICK_LABEL_SIZE,
+        width=AXIS_WIDTH,
+        length=TICK_LENGTH,
+        direction="out",
+        colors=TEXT_COLOR,
+    )
+    axis.tick_params(
+        axis="both",
+        which="minor",
+        width=max(AXIS_WIDTH * 0.75, 0.35),
+        length=max(TICK_LENGTH * 0.6, 1.5),
+        direction="out",
+        colors=TEXT_COLOR,
+    )
+    if grid is not None:
+        axis.grid(grid, color=GRID_COLOR, linewidth=GRID_WIDTH, linestyle=":", alpha=0.9)
+    for spine in axis.spines.values():
+        spine.set_linewidth(AXIS_WIDTH)
+        spine.set_color(AXIS_COLOR)
+    legend = axis.get_legend()
+    if legend is not None:
+        legend.set_frame_on(False)
+        for text in legend.get_texts():
+            text.set_color(TEXT_COLOR)
+            text.set_fontsize(TICK_LABEL_SIZE)
+
+
+def _style_figure(fig) -> None:
+    fig.patch.set_facecolor("white")
+    if fig._suptitle is not None:
+        fig._suptitle.set_fontsize(TITLE_SIZE)
+        fig._suptitle.set_fontweight("bold")
+        fig._suptitle.set_color(TEXT_COLOR)
+    for axis in fig.get_axes():
+        _style_axis(axis, grid=None)
+
+
+def _style_colorbar(colorbar, label: str | None = None) -> None:
+    if label is not None:
+        colorbar.set_label(label, fontsize=COLORBAR_LABEL_SIZE, color=TEXT_COLOR, labelpad=10)
+    colorbar.ax.tick_params(
+        labelsize=TICK_LABEL_SIZE,
+        width=AXIS_WIDTH,
+        length=TICK_LENGTH,
+        direction="out",
+        colors=TEXT_COLOR,
+    )
+    colorbar.outline.set_linewidth(AXIS_WIDTH)
+    colorbar.outline.set_edgecolor(AXIS_COLOR)
+
+
 def _finish(fig, output, dpi: int, ctx) -> None:
     """Save a figure while avoiding tight_layout warnings for complex axes."""
     output.parent.mkdir(parents=True, exist_ok=True)
+    _style_figure(fig)
     skip_tight = bool(getattr(fig, "_bmatrix_skip_tight_layout", False))
     constrained = False
     try:
@@ -100,7 +228,7 @@ def _finish(fig, output, dpi: int, ctx) -> None:
 def _add_map_background(axis, *, extent=None, global_map: bool = False, transform=None):
     ccrs, cfeature = _cartopy()
     if ccrs is None:
-        axis.grid(True)
+        _style_axis(axis, grid=True)
         return None
 
     plate = transform or ccrs.PlateCarree()
@@ -109,26 +237,37 @@ def _add_map_background(axis, *, extent=None, global_map: bool = False, transfor
             axis.set_global()
         elif extent is not None:
             axis.set_extent(extent, crs=plate)
-        axis.add_feature(cfeature.LAND, facecolor="0.96", edgecolor="none", zorder=0)
+        axis.add_feature(cfeature.LAND, facecolor="#F3F4F6", edgecolor="none", zorder=0)
         axis.add_feature(cfeature.OCEAN, facecolor="white", edgecolor="none", zorder=0)
-        axis.coastlines(resolution="110m", linewidth=0.75, color="#334155", zorder=5)
-        axis.add_feature(cfeature.BORDERS, linewidth=0.35, edgecolor="#64748b", zorder=5)
+        axis.coastlines(resolution="110m", linewidth=0.8, color=MAP_LINE, zorder=5)
+        axis.add_feature(cfeature.BORDERS, linewidth=0.35, edgecolor=MAP_BORDER, zorder=5)
         gridlines = axis.gridlines(
             draw_labels=True,
             linewidth=0.45,
             linestyle=":",
-            color="#cbd5e1",
-            alpha=0.85,
+            color=GRID_COLOR,
+            alpha=0.9,
         )
         gridlines.top_labels = False
         gridlines.right_labels = False
+        gridlines.xlabel_style = {"size": TICK_LABEL_SIZE, "color": TEXT_COLOR}
+        gridlines.ylabel_style = {"size": TICK_LABEL_SIZE, "color": TEXT_COLOR}
     except Exception:
-        axis.grid(True)
+        _style_axis(axis, grid=True)
         return None
     return plate
 
 
-def _plot_latlev(latlev, lat, title: str, label: str, unit: str, output: Path, dpi: int, ctx) -> None:
+def _plot_latlev(
+    latlev,
+    lat,
+    title: str,
+    label: str,
+    unit: str,
+    output: Path,
+    dpi: int,
+    ctx,
+) -> None:
     """Latitude-level plot using publication-style sequential/diverging palettes."""
     from . import runner
 
@@ -156,17 +295,17 @@ def _plot_latlev(latlev, lat, title: str, label: str, unit: str, output: Path, d
         ctx.np.arange(values.shape[0]),
         ctx.np.ma.masked_invalid(values),
         levels=levels[::4],
-        colors="#334155",
-        linewidths=0.45,
-        alpha=0.5,
+        colors=MAP_LINE,
+        linewidths=0.55,
+        alpha=0.65,
     )
-    axis.clabel(lines, inline=True, fontsize=7, fmt="%.2g", colors="#475569")
-    axis.set_title(f"{title} — {label}")
+    axis.clabel(lines, inline=True, fontsize=TICK_LABEL_SIZE - 1, fmt="%.2g", colors=MUTED_TEXT)
+    axis.set_title(f"{title} — {label}", pad=10)
     axis.set_xlabel("Latitude (°)")
     axis.set_ylabel("Nível vertical")
-    axis.grid(True)
+    _style_axis(axis, grid=True)
     colorbar = fig.colorbar(image, ax=axis, pad=0.018, fraction=0.048)
-    colorbar.set_label(unit)
+    _style_colorbar(colorbar, unit)
     runner._finish(fig, output, dpi, ctx)
 
 
@@ -232,7 +371,7 @@ def _plot_dirac_spatial(
     colorbar_axis = fig.add_subplot(grid[0, -1])
 
     label = runner.CONTROL_LABELS.get(name, name)
-    fig.suptitle(f"Resposta espacial da B: {label} a um impulso em $T_u$ (DIRAC)", fontsize=17)
+    fig.suptitle(f"Resposta espacial da B: {label} a um impulso em $T_u$ (DIRAC)", y=0.955)
     norm = ctx.plt.Normalize(vmin=-maximum, vmax=maximum)
     cmap = _scifig_cmap(ctx, "diverging")
     artist = None
@@ -261,7 +400,7 @@ def _plot_dirac_spatial(
                 [lat0],
                 marker="x",
                 s=105,
-                color=runner.FG,
+                color=TEXT_COLOR,
                 linewidths=2.2,
                 zorder=6,
                 **scatter_kwargs,
@@ -277,24 +416,24 @@ def _plot_dirac_spatial(
                 cmap=cmap,
                 transform=None,
             )
-            axis.scatter([0.0], [lat0], marker="x", s=105, color=runner.FG, linewidths=2.2)
+            axis.scatter([0.0], [lat0], marker="x", s=105, color=TEXT_COLOR, linewidths=2.2)
             axis.set_xlabel("Longitude relativa ao impulso (°)")
             axis.set_xlim(-dlon, dlon)
             axis.set_ylim(lat0 - dlat, lat0 + dlat)
-            axis.grid(True)
+            _style_axis(axis, grid=True)
 
-        axis.set_title("2D/superfície" if item is None else f"Nível {item}")
+        axis.set_title("2D/superfície" if item is None else f"Nível {item}", pad=8)
 
     axes[0].set_ylabel("Latitude (°)")
     if artist is not None:
         colorbar = fig.colorbar(artist, cax=colorbar_axis)
-        colorbar.set_label(f"Resposta em {label}", labelpad=12)
+        _style_colorbar(colorbar, f"Resposta em {label}")
     fig.text(
         0.01,
         0.035,
         f"Impulso: {lat0:.1f}°, {lon0:.1f}°",
-        fontsize=8,
-        color=runner.MUTED,
+        fontsize=ANNOTATION_SIZE,
+        color=MUTED_TEXT,
         ha="left",
         va="bottom",
     )
@@ -413,7 +552,7 @@ def _plot_global_spatial(
         transform = None
         axis.set_xlim(-180.0, 180.0)
         axis.set_ylim(-90.0, 90.0)
-        axis.grid(True)
+        _style_axis(axis, grid=True)
     colorbar_axis = fig.add_subplot(grid[0, 1])
 
     artist = _spatial_artist(
@@ -430,13 +569,13 @@ def _plot_global_spatial(
     label = runner.CONTROL_LABELS.get(variable_name, variable_name)
     product_label = GLOBAL_PRODUCT_LABELS.get(product_name, product_name)
     level_label = "2D/superfície" if level is None else f"Nível {level}"
-    fig.suptitle(f"Campo espacial da B: {label} — {product_label}", fontsize=17, y=0.965)
-    axis.set_title(level_label, fontsize=12, pad=8)
+    fig.suptitle(f"Campo espacial da B: {label} — {product_label}", y=0.955)
+    axis.set_title(level_label, pad=8)
     if not has_map:
         axis.set_xlabel("Longitude (°)")
         axis.set_ylabel("Latitude (°)")
     colorbar = fig.colorbar(artist, cax=colorbar_axis)
-    colorbar.set_label(label)
+    _style_colorbar(colorbar, label)
     _finish(fig, output, dpi, ctx)
 
 
