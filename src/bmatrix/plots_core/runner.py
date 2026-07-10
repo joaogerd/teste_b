@@ -218,23 +218,31 @@ def _plot_hdiag_latlev(
         outdir = root / directory
         outdir.mkdir(parents=True, exist_ok=True)
         with ctx.netcdf4.Dataset(path) as dataset:
-            lat = _latitude_for_dataset(dataset, products, ctx=ctx)
             for name in _ordered_plot_variables(dataset.variables, selected):
                 variable = dataset.variables[name]
                 if not _is_numeric_variable(variable, ctx=ctx):
                     continue
-                latlev = _lat_level_field(variable, lat, ctx=ctx)
+                target_size = _latitude_target_size(variable, ctx=ctx)
+                lat = _latitude_for_dataset(dataset, products, target_size=target_size, ctx=ctx)
+                result = _lat_level_field(variable, lat, ctx=ctx)
+                if result is None:
+                    continue
+                latlev, plot_lat = result
                 if latlev is None or not ctx.np.isfinite(latlev).any():
                     continue
                 if convert_km:
                     latlev = _as_km(latlev, getattr(variable, "units", ""), ctx=ctx)
                 label = CONTROL_LABELS.get(name, name)
-                if latlev.shape[0] == 1:
+
+                if latlev.shape[1] == 1:
+                    figure = outdir / f"{product_name}_{_safe_name(name)}_vertical_profile.png"
+                    _plot_vertical_profile(latlev[:, 0], title, label, unit_label, figure, dpi, ctx)
+                elif latlev.shape[0] == 1:
                     figure = outdir / f"{product_name}_{_safe_name(name)}_lat_profile.png"
-                    _plot_lat_profile(latlev[0], lat, title, label, unit_label, figure, dpi, ctx)
+                    _plot_lat_profile(latlev[0], plot_lat, title, label, unit_label, figure, dpi, ctx)
                 else:
                     figure = outdir / f"{product_name}_{_safe_name(name)}_latlev.png"
-                    _plot_latlev(latlev, lat, title, label, unit_label, figure, dpi, ctx)
+                    _plot_latlev(latlev, plot_lat, title, label, unit_label, figure, dpi, ctx)
                 figures.append(figure)
     return figures
 
@@ -352,6 +360,21 @@ def _plot_lat_profile(profile, lat, title: str, label: str, unit: str, output: P
     axis.set_title(f"{title} — {label}")
     axis.set_xlabel("Latitude (°)")
     axis.set_ylabel(unit)
+    axis.grid(True)
+    _finish(fig, output, dpi, ctx)
+
+
+def _plot_vertical_profile(profile, title: str, label: str, unit: str, output: Path, dpi: int, ctx: PlotContext) -> None:
+    values = ctx.np.asarray(profile, dtype=float)
+    levels = ctx.np.arange(values.size)
+    finite = ctx.np.isfinite(values)
+    if not finite.any():
+        return
+    fig, axis = ctx.plt.subplots(figsize=(6.4, 5.8))
+    axis.plot(values[finite], levels[finite], color=ACCENTS[0], linewidth=2.8)
+    axis.set_title(f"{title} — {label}")
+    axis.set_xlabel(unit)
+    axis.set_ylabel("Nível vertical")
     axis.grid(True)
     _finish(fig, output, dpi, ctx)
 
@@ -647,27 +670,82 @@ def _select_plot_values(variable, *, level: int, ctx: PlotContext):
     return reshaped[:, 0]
 
 
+
+def _latitude_target_size(variable, *, ctx: PlotContext) -> int | None:
+    values, dims = _variable_values_and_dims(variable, ctx=ctx)
+    if "nCells" in dims:
+        return int(values.shape[dims.index("nCells")])
+    if values.ndim == 1:
+        return int(values.size)
+    if values.ndim >= 2:
+        return int(max(values.shape))
+    return None
+
+
 def _lat_level_field(variable, lat, *, ctx: PlotContext):
     values, dims = _variable_values_and_dims(variable, ctx=ctx)
-    lat = ctx.np.asarray(lat, dtype=float).ravel()
-    if values.ndim == 1 and values.size == lat.size:
-        return _bin_latitude(values[:, None], lat, ctx=ctx).T
-    if values.ndim == 2:
-        if values.shape[0] == lat.size or values.shape[1] == lat.size:
-            result = _lat_level_from_values(values, lat, ctx=ctx)
-            return result[:, ctx.np.argsort(lat)]
-        return values.T
+    lat = None if lat is None else ctx.np.asarray(lat, dtype=float).ravel()
+
+    if values.ndim == 1:
+        if lat is not None and values.size == lat.size:
+            binned, binned_lat = _bin_latitude(values[:, None], lat, ctx=ctx)
+            return binned.T, binned_lat
+        return values[None, :], ctx.np.arange(values.size, dtype=float)
+
     if "nCells" in dims and "nVertLevels" in dims:
         cell_axis = dims.index("nCells")
         level_axis = dims.index("nVertLevels")
         values = ctx.np.moveaxis(values, (cell_axis, level_axis), (0, 1))
         matrix = values.reshape(values.shape[0], values.shape[1], -1)[:, :, 0]
-        return _bin_latitude(matrix, lat, ctx=ctx).T
+        if lat is not None and matrix.shape[0] == lat.size:
+            binned, binned_lat = _bin_latitude(matrix, lat, ctx=ctx)
+            return binned.T, binned_lat
+        return ctx.np.nanmean(matrix, axis=0)[:, None], ctx.np.array([0.0])
+
+    if values.ndim == 2:
+        if lat is not None:
+            result = _lat_level_from_2d(values, lat, ctx=ctx)
+            if result is not None:
+                return result
+        if values.shape[0] <= values.shape[1]:
+            profile = ctx.np.nanmean(values, axis=1)
+        else:
+            profile = ctx.np.nanmean(values, axis=0)
+        return profile[:, None], ctx.np.array([0.0])
+
+    reshaped = values.reshape(values.shape[0], -1)
+    profile = ctx.np.nanmean(reshaped, axis=1)
+    return profile[:, None], ctx.np.array([0.0])
+
+
+def _lat_level_from_values(values, lat, *, ctx: PlotContext):
+    """Return a 2-D field oriented as level x latitude for VBAL products."""
+    values = ctx.np.asarray(values, dtype=float)
+    lat = ctx.np.asarray(lat, dtype=float).ravel()
+    if values.ndim != 2:
+        raise ValueError(f"Expected a 2-D product, got {values.shape}")
+    if values.shape[1] == lat.size:
+        return values
+    if values.shape[0] == lat.size:
+        return values.T
+    raise ValueError(f"Latitude length {lat.size} is incompatible with {values.shape}")
+
+
+def _lat_level_from_2d(values, lat, *, ctx: PlotContext):
+    values = ctx.np.asarray(values, dtype=float)
+    lat = ctx.np.asarray(lat, dtype=float).ravel()
+    if values.shape[0] == lat.size:
+        binned, binned_lat = _bin_latitude(values, lat, ctx=ctx)
+        return binned.T, binned_lat
+    if values.shape[1] == lat.size:
+        binned, binned_lat = _bin_latitude(values.T, lat, ctx=ctx)
+        return binned.T, binned_lat
     return None
 
 
 def _bin_latitude(values, lat, *, ctx: PlotContext):
     values = ctx.np.asarray(values, dtype=float)
+    lat = ctx.np.asarray(lat, dtype=float).ravel()
     order = ctx.np.argsort(lat)
     lat = lat[order]
     values = values[order]
@@ -684,26 +762,47 @@ def _bin_latitude(values, lat, *, ctx: PlotContext):
     return values, lat
 
 
-def _lat_level_from_values(values, lat, *, ctx: PlotContext):
-    values = ctx.np.asarray(values, dtype=float)
-    if values.ndim != 2:
-        raise ValueError(f"Expected a 2-D product, got {values.shape}")
-    if values.shape[1] == lat.size:
-        return values
-    if values.shape[0] == lat.size:
-        return values.T
-    raise ValueError(f"Latitude length {lat.size} is incompatible with {values.shape}")
-
-
-def _latitude_for_dataset(dataset, products: BMatrixProducts, *, ctx: PlotContext):
+def _latitude_for_dataset(
+    dataset,
+    products: BMatrixProducts,
+    *,
+    target_size: int | None = None,
+    ctx: PlotContext,
+):
     _, lat = _coordinates(dataset, ctx=ctx)
-    if lat is not None:
+    if lat is not None and (target_size is None or lat.size == target_size):
         return lat
+
+    candidates = (
+        products.dirac,
+        products.dirac_nicas,
+        products.nicas_norm,
+        products.nicas,
+        products.sampling,
+        products.vbal,
+        products.stddev,
+        products.cor_rh,
+        products.cor_rv,
+    )
+    seen: set[Path] = set()
+    for candidate in candidates:
+        candidate = Path(candidate)
+        if candidate in seen or not candidate.is_file():
+            continue
+        seen.add(candidate)
+        try:
+            with ctx.netcdf4.Dataset(candidate) as other:
+                _, candidate_lat = _coordinates(other, ctx=ctx)
+        except OSError:
+            continue
+        if candidate_lat is not None and (target_size is None or candidate_lat.size == target_size):
+            return candidate_lat
+
     vbal_lat = _latitudes_from_vbal(products.vbal, ctx)
-    if vbal_lat is not None:
+    if vbal_lat is not None and (target_size is None or vbal_lat.size == target_size):
         return vbal_lat
-    first = next(iter(dataset.variables.values()))
-    return ctx.np.arange(first.shape[0], dtype=float)
+
+    return None
 
 
 def _latitudes_from_vbal(path: Path, ctx: PlotContext):
@@ -731,7 +830,6 @@ def _maybe_coord(dataset, names: Iterable[str], *, ctx: PlotContext):
         if name in dataset.variables:
             return ctx.np.ma.asarray(dataset.variables[name][:], dtype=float).filled(ctx.np.nan)
     return None
-
 
 def _dirac_levels(variable, level: int, *, ctx: PlotContext):
     values, dims = _variable_values_and_dims(variable, ctx=ctx)
