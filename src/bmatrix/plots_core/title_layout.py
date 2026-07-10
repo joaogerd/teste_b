@@ -1,7 +1,7 @@
 """Left-aligned title layout for B-matrix diagnostic figures.
 
 The plotting stage already centralizes palette, map background and typography in
-``map_enhancements``.  This module applies one final presentation rule: figure
+``map_enhancements``. This module applies one final presentation rule: figure
 and single-panel titles should be aligned with the left edge of the plotting
 area and placed close to the axes, following the style used in the user's
 reference academic figures.
@@ -20,10 +20,16 @@ DATA_AXIS_MIN_HEIGHT = 0.12
 
 
 def apply() -> None:
-    """Patch the active runner ``_finish`` helper to align titles at save time."""
+    """Patch all active finish helpers to align titles at save time."""
+    from . import map_enhancements
     from . import runner
 
-    previous_finish = runner._finish
+    _patch_finish(runner, "_finish")
+    _patch_finish(map_enhancements, "_finish")
+
+
+def _patch_finish(module, name: str) -> None:
+    previous_finish = getattr(module, name)
     if getattr(previous_finish, "_bmatrix_left_title_layout", False):
         return
 
@@ -32,7 +38,7 @@ def apply() -> None:
         return previous_finish(fig, output, dpi, ctx)
 
     _finish._bmatrix_left_title_layout = True  # type: ignore[attr-defined]
-    runner._finish = _finish
+    setattr(module, name, _finish)
 
 
 def _apply_title_layout(fig) -> None:
@@ -75,7 +81,7 @@ def _align_single_axis_titles(fig, data_axes: list) -> None:
     """Move standalone axes titles to the left edge.
 
     When a figure has a suptitle, axes titles are usually panel labels such as
-    ``Nível 25`` and should remain centered.  Without a suptitle, the axes title
+    ``Nível 25`` and should remain centered. Without a suptitle, the axes title
     is the main figure title and should follow the left-aligned academic style.
     """
     if getattr(fig, "_suptitle", None) is not None:
