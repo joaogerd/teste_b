@@ -24,6 +24,12 @@ GLOBAL_MIN_RANGE = 1.0e-12
 # visually misleading, so 06_spatial_fields focuses on spatial diagnostics that
 # make sense globally.
 GLOBAL_SPATIAL_PRODUCTS = ("stddev", "cor_rh", "cor_rv", "nicas_norm")
+GLOBAL_PRODUCT_LABELS = {
+    "stddev": "desvio-padrão",
+    "cor_rh": "escala horizontal",
+    "cor_rv": "escala vertical",
+    "nicas_norm": "normalização NICAS",
+}
 
 
 def apply() -> None:
@@ -336,7 +342,7 @@ def _plot_global_spatial(
         left=0.07,
         right=0.91,
         bottom=0.12,
-        top=0.86,
+        top=0.80,
         wspace=0.055,
     )
     if has_map:
@@ -362,8 +368,10 @@ def _plot_global_spatial(
     )
 
     label = runner.CONTROL_LABELS.get(variable_name, variable_name)
-    level_label = "2D/superfície" if level is None else f"nível {level}"
-    axis.set_title(f"{product_name} — {label} — {level_label}")
+    product_label = GLOBAL_PRODUCT_LABELS.get(product_name, product_name)
+    level_label = "2D/superfície" if level is None else f"Nível {level}"
+    fig.suptitle(f"Campo espacial da B: {label} — {product_label}", fontsize=17, y=0.965)
+    axis.set_title(level_label, fontsize=12, pad=8)
     if not has_map:
         axis.set_xlabel("Longitude (°)")
         axis.set_ylabel("Latitude (°)")
