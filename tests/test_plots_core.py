@@ -11,7 +11,7 @@ from bmatrix.products import BMatrixProducts
 
 def _write_product(path: Path, variable: str = "temperature") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with netCDF4.Dataset(path, "w", format="CDF5") as dataset:
+    with netCDF4.Dataset(path, "w", format="NETCDF4") as dataset:
         dataset.createDimension("Time", 1)
         dataset.createDimension("nCells", 3)
         dataset.createDimension("nVertLevels", 2)
