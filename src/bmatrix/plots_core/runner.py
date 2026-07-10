@@ -195,9 +195,11 @@ def _generate_presentation_figures(
     ctx: PlotContext,
 ) -> list[Path]:
     figures: list[Path] = []
+    figures.extend(_plot_presentation_set(products, root, selected, level, dpi, ctx))
     figures.extend(_plot_hdiag_latlev(products, root, selected, dpi, ctx))
     figures.extend(_plot_vbal(products, root, dpi, ctx))
     figures.extend(_plot_dirac(products, root, selected, level, dpi, ctx))
+    figures.extend(_plot_spatial_fields(products, root, selected, level, dpi, ctx))
     return figures
 
 
@@ -278,17 +280,17 @@ def _plot_dirac(
     outdir.mkdir(parents=True, exist_ok=True)
     figures: list[Path] = []
     with ctx.netcdf4.Dataset(products.dirac) as dataset:
-        lon, lat = _coordinates(dataset, ctx=ctx)
-        if lon is None or lat is None:
-            return figures
         for name in _ordered_plot_variables(dataset.variables, selected):
             if name not in dataset.variables:
                 continue
             variable = dataset.variables[name]
             if not _is_numeric_variable(variable, ctx=ctx):
                 continue
-            levels, fields = _dirac_levels(variable, level, ctx=ctx)
+            levels, fields = _spatial_levels(variable, level, ctx=ctx)
             if not fields:
+                continue
+            lon, lat = _coordinates_for_size(products, len(fields[0]), ctx=ctx, dataset=dataset)
+            if lon is None or lat is None:
                 continue
             figure = outdir / f"dirac_{_safe_name(name)}_spatial_response.png"
             _plot_dirac_spatial(name, lon, lat, levels, fields, figure, dpi, ctx)
@@ -511,8 +513,8 @@ def _plot_dirac_spatial(
     maximum = max(float(np.nanmax(np.abs(field))) for field in fields)
     if not np.isfinite(maximum) or maximum <= 0.0:
         maximum = 1.0
-    dlon = 24.0
-    dlat = 18.0
+    dlon = 38.0
+    dlat = 28.0
     local = (np.abs(local_lon) <= dlon) & (lat >= lat0 - dlat) & (lat <= lat0 + dlat)
 
     fig = ctx.plt.figure(figsize=(16.8, 5.9))
@@ -520,7 +522,7 @@ def _plot_dirac_spatial(
     axes = [fig.add_subplot(grid[0, index]) for index in range(len(levels))]
     colorbar_axis = fig.add_subplot(grid[0, -1])
     label = CONTROL_LABELS.get(name, name)
-    fig.suptitle(f"Resposta espacial da B a um impulso em {label} (DIRAC)", fontsize=17)
+    fig.suptitle(f"Resposta espacial da B: {label} a um impulso em $T_u$ (DIRAC)", fontsize=17)
     norm = ctx.plt.Normalize(vmin=-maximum, vmax=maximum)
     artist = None
     for axis, field, item in zip(axes, fields, levels):
@@ -528,14 +530,14 @@ def _plot_dirac_spatial(
         signal = local & np.isfinite(local_field)
         artist = _spatial_artist(axis, local_lon[signal], lat[signal], local_field[signal], norm, ctx)
         axis.scatter([0.0], [lat0], marker="x", s=105, color=FG, linewidths=2.2, zorder=3)
-        axis.set_title(f"Nível {item}")
+        axis.set_title("2D/superfície" if item is None else f"Nível {item}")
         axis.set_xlabel("Longitude relativa ao impulso (°)")
         axis.set_xlim(-dlon, dlon)
         axis.set_ylim(lat0 - dlat, lat0 + dlat)
         axis.grid(True)
     axes[0].set_ylabel("Latitude (°)")
     colorbar = fig.colorbar(artist, cax=colorbar_axis)
-    colorbar.set_label(f"Incremento de {label}", labelpad=12)
+    colorbar.set_label(f"Resposta em {label}", labelpad=12)
     fig.text(0.01, 0.035, f"Impulso: {lat0:.1f}°, {lon0:.1f}°", fontsize=8, color=MUTED, ha="left", va="bottom")
     _finish(fig, output, dpi, ctx)
 
@@ -549,6 +551,321 @@ def _spatial_artist(axis, x, y, values, norm, ctx: PlotContext):
             pass
     axis.scatter(x, y, s=6, color=GRID, alpha=0.18, linewidths=0, zorder=1)
     return axis.scatter(x, y, c=values, s=28, cmap="coolwarm", norm=norm, linewidths=0, zorder=2)
+
+
+def _plot_presentation_set(
+    products: BMatrixProducts,
+    root: Path,
+    selected: Sequence[str],
+    level: int,
+    dpi: int,
+    ctx: PlotContext,
+) -> list[Path]:
+    """Recreate the compact presentation figure set from the old branch."""
+    outdir = root / "00_presentation"
+    outdir.mkdir(parents=True, exist_ok=True)
+    figures: list[Path] = []
+
+    lat = _latitudes_from_vbal(products.vbal, ctx)
+    if lat is not None and Path(products.vbal).is_file():
+        order = ctx.np.argsort(lat)
+        sorted_lat = lat[order]
+        with ctx.netcdf4.Dataset(products.vbal) as dataset:
+            figure = outdir / "01_bmatrix_balance_explained_variance.png"
+            if _plot_vbal_explained(dataset, sorted_lat, order, figure, dpi, ctx):
+                figures.append(figure)
+
+            figure = outdir / "02_bmatrix_temperature_psi_regression.png"
+            if _plot_vbal_regression(dataset, lat, target_lat=35.0, output=figure, dpi=dpi, ctx=ctx):
+                figures.append(figure)
+
+    figure = outdir / "03_bmatrix_stddev_and_correlation_scales.png"
+    if _plot_hdiag_profile_summary(products, figure, selected, dpi, ctx):
+        figures.append(figure)
+
+    if Path(products.dirac).is_file():
+        with ctx.netcdf4.Dataset(products.dirac) as dataset:
+            for candidate in ("temperature", "air_temperature", "stream_function", "velocity_potential", "spechum"):
+                if candidate not in dataset.variables:
+                    continue
+                variable = dataset.variables[candidate]
+                levels, fields = _spatial_levels(variable, level, ctx=ctx)
+                if not fields:
+                    continue
+                lon, lat = _coordinates_for_size(products, len(fields[0]), ctx=ctx, dataset=dataset)
+                if lon is None or lat is None:
+                    continue
+                figure = outdir / f"04_bmatrix_dirac_{_safe_name(candidate)}_response.png"
+                _plot_dirac_spatial(candidate, lon, lat, levels, fields, figure, dpi, ctx)
+                figures.append(figure)
+                break
+
+    return figures
+
+
+def _plot_hdiag_profile_summary(
+    products: BMatrixProducts,
+    output: Path,
+    selected: Sequence[str],
+    dpi: int,
+    ctx: PlotContext,
+) -> bool:
+    sources = (
+        (products.stddev, "Desvio-padrão", "desvio-padrão", False),
+        (products.cor_rh, "Escala horizontal", "km", True),
+        (products.cor_rv, "Escala vertical", "km", True),
+    )
+    fig, axes = ctx.plt.subplots(1, 3, figsize=(16.2, 6.1), sharey=True)
+    fig.suptitle("Matriz B — amplitude e escalas de correlação diagnosticadas", fontsize=17)
+    plotted = False
+
+    variables = tuple(selected or DEFAULT_PLOT_VARIABLES)
+    for axis, (path, title, xlabel, convert_km) in zip(axes, sources):
+        if not Path(path).is_file():
+            axis.set_axis_off()
+            continue
+        with ctx.netcdf4.Dataset(path) as dataset:
+            names = _ordered_plot_variables(dataset.variables, variables)
+            for color, name in zip(ACCENTS * 4, names):
+                if name not in dataset.variables:
+                    continue
+                profile = _vertical_profile(dataset.variables[name], ctx=ctx)
+                if profile is None or not ctx.np.isfinite(profile).any():
+                    continue
+                if convert_km:
+                    profile = _as_km(profile, getattr(dataset.variables[name], "units", ""), ctx=ctx)
+                axis.plot(
+                    profile,
+                    ctx.np.arange(profile.size),
+                    color=color,
+                    linewidth=2.4,
+                    label=CONTROL_LABELS.get(name, name),
+                )
+                plotted = True
+        axis.set_title(title)
+        axis.set_xlabel(xlabel)
+        axis.grid(True)
+        axis.legend(loc="best", fontsize=9)
+
+    axes[0].set_ylabel("Nível vertical")
+
+    if plotted:
+        _finish(fig, output, dpi, ctx)
+    else:
+        ctx.plt.close(fig)
+    return plotted
+
+
+def _vertical_profile(variable, *, ctx: PlotContext):
+    values, dims = _variable_values_and_dims(variable, ctx=ctx)
+    if "nVertLevels" not in dims:
+        return None
+    level_axis = dims.index("nVertLevels")
+    values = ctx.np.moveaxis(values, level_axis, 0)
+    return ctx.np.nanmean(values.reshape(values.shape[0], -1), axis=1)
+
+
+def _plot_spatial_fields(
+    products: BMatrixProducts,
+    root: Path,
+    selected: Sequence[str],
+    level: int,
+    dpi: int,
+    ctx: PlotContext,
+) -> list[Path]:
+    """Generate global spatial maps for each product/variable where coordinates exist."""
+    outdir = root / "06_spatial_fields"
+    outdir.mkdir(parents=True, exist_ok=True)
+    figures: list[Path] = []
+
+    product_map = {
+        "stddev": products.stddev,
+        "cor_rh": products.cor_rh,
+        "cor_rv": products.cor_rv,
+        "nicas_norm": products.nicas_norm,
+        "dirac_nicas": products.dirac_nicas,
+        "dirac": products.dirac,
+    }
+
+    for product_name, product_path in product_map.items():
+        product_path = Path(product_path)
+        if not product_path.is_file():
+            continue
+        with ctx.netcdf4.Dataset(product_path) as dataset:
+            for name in _ordered_plot_variables(dataset.variables, selected):
+                if name not in dataset.variables:
+                    continue
+                variable = dataset.variables[name]
+                if not _is_numeric_variable(variable, ctx=ctx):
+                    continue
+                levels, fields = _spatial_levels(variable, level, ctx=ctx)
+                if not fields:
+                    continue
+                for item, field in zip(levels, fields):
+                    lon, lat = _coordinates_for_size(products, len(field), ctx=ctx, dataset=dataset)
+                    if lon is None or lat is None:
+                        continue
+                    level_name = "surface" if item is None else f"lev{item:02d}"
+                    figure = outdir / f"{product_name}_{_safe_name(name)}_{level_name}_spatial.png"
+                    _plot_global_spatial(product_name, name, lon, lat, field, item, figure, dpi, ctx)
+                    figures.append(figure)
+
+    return figures
+
+
+def _plot_global_spatial(
+    product_name: str,
+    variable_name: str,
+    lon,
+    lat,
+    field,
+    level: int | None,
+    output: Path,
+    dpi: int,
+    ctx: PlotContext,
+) -> None:
+    values = ctx.np.asarray(field, dtype=float).ravel()
+    lon = ctx.np.asarray(lon, dtype=float).ravel()
+    lat = ctx.np.asarray(lat, dtype=float).ravel()
+
+    finite = ctx.np.isfinite(values) & ctx.np.isfinite(lon) & ctx.np.isfinite(lat)
+    if not finite.any():
+        return
+
+    finite_values = values[finite]
+    vmin = float(ctx.np.nanpercentile(finite_values, 2.0))
+    vmax = float(ctx.np.nanpercentile(finite_values, 98.0))
+    if not ctx.np.isfinite(vmin) or not ctx.np.isfinite(vmax) or vmin == vmax:
+        vmin = float(ctx.np.nanmin(finite_values))
+        vmax = float(ctx.np.nanmax(finite_values))
+
+    if vmin < 0.0 < vmax:
+        amplitude = max(abs(vmin), abs(vmax))
+        vmin, vmax = -amplitude, amplitude
+        cmap = "coolwarm"
+    else:
+        cmap = "viridis"
+    norm = ctx.plt.Normalize(vmin=vmin, vmax=vmax)
+
+    fig, axis = ctx.plt.subplots(figsize=(10.8, 5.4))
+    try:
+        triangulation = ctx.mtri.Triangulation(lon[finite], lat[finite])
+        artist = axis.tricontourf(
+            triangulation,
+            finite_values,
+            levels=21,
+            cmap=cmap,
+            norm=norm,
+            extend="both",
+        )
+    except (ValueError, RuntimeError):
+        artist = axis.scatter(lon[finite], lat[finite], c=finite_values, s=4, cmap=cmap, norm=norm)
+
+    label = CONTROL_LABELS.get(variable_name, variable_name)
+    level_label = "2D/superfície" if level is None else f"nível {level}"
+    axis.set_title(f"{product_name} — {label} — {level_label}")
+    axis.set_xlabel("Longitude (°)")
+    axis.set_ylabel("Latitude (°)")
+    axis.set_xlim(-180.0, 180.0)
+    axis.set_ylim(-90.0, 90.0)
+    axis.grid(True)
+
+    colorbar = fig.colorbar(artist, ax=axis, pad=0.018, fraction=0.045)
+    colorbar.set_label(label)
+
+    _finish(fig, output, dpi, ctx)
+
+
+def _spatial_levels(variable, level: int, *, ctx: PlotContext):
+    values, dims = _variable_values_and_dims(variable, ctx=ctx)
+
+    if "nCells" in dims and "nVertLevels" in dims:
+        nlevels = values.shape[dims.index("nVertLevels")]
+        center = max(0, min(int(level), nlevels - 1))
+        levels = sorted(set((max(0, center - 5), center, min(nlevels - 1, center + 5))))
+        fields = [_field_level_from_values(values, dims, item, ctx=ctx) for item in levels]
+        return levels, fields
+
+    if "nCells" in dims:
+        if dims.index("nCells") != 0:
+            values = ctx.np.moveaxis(values, dims.index("nCells"), 0)
+        return [None], [values.reshape(values.shape[0], -1)[:, 0]]
+
+    if values.ndim == 1:
+        return [None], [values]
+
+    return [], []
+
+
+def _coordinates_for_size(
+    products: BMatrixProducts,
+    size: int,
+    *,
+    ctx: PlotContext,
+    dataset=None,
+):
+    if dataset is not None:
+        lon, lat = _coordinates(dataset, ctx=ctx)
+        if lon is not None and lat is not None and lon.size == size and lat.size == size:
+            return lon, lat
+
+    for candidate in _coordinate_candidates(products):
+        try:
+            with ctx.netcdf4.Dataset(candidate) as other:
+                lon, lat = _coordinates(other, ctx=ctx)
+        except OSError:
+            continue
+        if lon is not None and lat is not None and lon.size == size and lat.size == size:
+            return lon, lat
+
+    return None, None
+
+
+def _coordinate_candidates(products: BMatrixProducts) -> list[Path]:
+    roots: list[Path] = []
+    product_paths = [Path(value) for value in asdict(products).values()]
+
+    for product in product_paths:
+        roots.append(product.parent)
+        roots.append(product.parent.parent)
+        if product.parent.name in {"HDIAG", "VBAL", "merge"}:
+            roots.append(product.parent.parent)
+
+    dirac_root = Path(products.dirac).parent
+    run_id = dirac_root.name
+    covariance_root = dirac_root.parent.parent if dirac_root.parent.name == "dirac" else None
+    if covariance_root is not None:
+        for stage in ("hdiag", "nicas", "dirac", "so", "vbal"):
+            roots.append(covariance_root / stage / run_id)
+            roots.append(covariance_root / stage / run_id / stage.upper())
+            roots.append(covariance_root / stage / run_id / "HDIAG")
+            roots.append(covariance_root / stage / run_id / "merge")
+
+    candidates: list[Path] = []
+    candidates.extend(product_paths)
+
+    for root in roots:
+        candidates.extend(
+            [
+                root / "x1.10242.invariant.nc",
+                root / "bg.nc",
+                root / "bg_so.nc",
+                root / "mpas.dirac.nc",
+                root / "template.nc",
+            ]
+        )
+        candidates.extend(sorted(root.glob("*invariant*.nc")))
+        candidates.extend(sorted(root.glob("templateFields*.nc")))
+        candidates.extend(sorted(root.glob("*.nc")))
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for item in candidates:
+        if item in seen or not item.is_file():
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
 
 
 def _product_map(products: BMatrixProducts) -> dict[str, Path]:
@@ -822,7 +1139,10 @@ def _coordinates(dataset, *, ctx: PlotContext):
     lat = _maybe_coord(dataset, ("latCell", "latitude", "lat", "lat_c2"), ctx=ctx)
     if lon is None or lat is None:
         return None, None
-    return _degrees(lon, ctx=ctx).ravel(), _degrees(lat, ctx=ctx).ravel()
+    lon = _degrees(lon, ctx=ctx).ravel()
+    lat = _degrees(lat, ctx=ctx).ravel()
+    lon = ((lon + 180.0) % 360.0) - 180.0
+    return lon, lat
 
 
 def _maybe_coord(dataset, names: Iterable[str], *, ctx: PlotContext):
@@ -930,11 +1250,13 @@ Resumo e figuras gerados a partir dos produtos finais da matriz B.
 
 ## Organização
 
+- `00_presentation/`: conjunto compacto no estilo das figuras de apresentação.
 - `01_stddev/`: seções latitude × nível do desvio-padrão diagnosticado.
 - `02_corr_horizontal/`: seções latitude × nível da escala horizontal.
 - `03_corr_vertical/`: seções latitude × nível da escala vertical.
 - `04_vbal/`: variância explicada pelo balanço e regressão vertical.
-- `05_dirac/`: resposta espacial local da B a impulsos DIRAC.
+- `05_dirac/`: resposta espacial local da B a impulsos DIRAC por variável.
+- `06_spatial_fields/`: mapas espaciais globais por produto/variável.
 - `99_quicklook/`: figuras simples de inspeção rápida por produto.
 
 ## Configuração
