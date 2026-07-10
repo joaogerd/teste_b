@@ -20,6 +20,11 @@ from .hdiag_core.model import hdiag_workspace
 from .nicas_core.prepare import prepare as prepare_nicas
 from .nicas_core.runner import submit as submit_nicas, validate as validate_nicas
 from .nicas_core.model import nicas_workspace
+from .plots_core.runner import (
+    generate_plots,
+    plots_workspace_from_bflow,
+    validate_plots,
+)
 from .products import BMatrixProducts
 from .so_core.prepare import prepare as prepare_so
 from .so_core.runner import submit as submit_so, validate as validate_so
@@ -29,8 +34,8 @@ from .unbalance_core.runner import prepare as prepare_unbalance, submit as submi
 from .vbal_core.model import vbal_workspace
 from .vbal_core.runner import prepare as prepare_vbal, submit as submit_vbal, validate as validate_vbal
 
-StageName = Literal["bflow", "vbal", "unbalance", "hdiag", "nicas", "so", "dirac"]
-STAGES: tuple[StageName, ...] = ("bflow", "vbal", "unbalance", "hdiag", "nicas", "so", "dirac")
+StageName = Literal["bflow", "vbal", "unbalance", "hdiag", "nicas", "so", "dirac", "plots"]
+STAGES: tuple[StageName, ...] = ("bflow", "vbal", "unbalance", "hdiag", "nicas", "so", "dirac", "plots")
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +49,15 @@ class PipelinePaths:
     nicas: Path
     so: Path
     dirac: Path
+    plots: Path
 
     @classmethod
-    def from_bflow(cls, config: Mapping[str, object], bflow: str | Path) -> "PipelinePaths":
+    def from_bflow(
+        cls,
+        config: Mapping[str, object],
+        bflow: str | Path,
+        plots: str | Path | None = None,
+    ) -> "PipelinePaths":
         """Resolve all downstream workspaces from the BFLOW workspace name."""
         bflow_path = Path(bflow).resolve()
         vbal = vbal_workspace(config, bflow_path)
@@ -61,6 +72,7 @@ class PipelinePaths:
             nicas=nicas,
             so=so_workspace(config, nicas),
             dirac=dirac_workspace(config, nicas),
+            plots=Path(plots).resolve() if plots else plots_workspace_from_bflow(config, bflow_path),
         )
 
     def as_strings(self) -> dict[str, str]:
@@ -85,6 +97,10 @@ class BuildRequest:
     poll_seconds: int = 30
     nicas_parallel: bool = False
     so_variant: str = "default"
+    plot_level: int = 30
+    plot_dpi: int = 150
+    plot_variables: tuple[str, ...] = ()
+    plots_workspace: Path | None = None
     dry_run: bool = False
 
     def __post_init__(self) -> None:
@@ -144,7 +160,7 @@ def _pairs_from_request(config: Mapping[str, object], request: BuildRequest) -> 
 def plan(config: Mapping[str, object], request: BuildRequest) -> PipelinePlan:
     """Create a side-effect-free plan for a selected stage range."""
     _, bflow = _pairs_from_request(config, request)
-    paths = PipelinePaths.from_bflow(config, bflow)
+    paths = PipelinePaths.from_bflow(config, bflow, plots=request.plots_workspace)
     selected = tuple(STAGES[STAGES.index(request.from_stage) : STAGES.index(request.to_stage) + 1])
     products = BMatrixProducts.from_workspaces(
         vbal_workspace=paths.vbal,
@@ -225,6 +241,16 @@ def build(config: Mapping[str, object], request: BuildRequest) -> PipelinePlan:
             )
             submit_dirac(paths.dirac, wait=True, poll_seconds=request.poll_seconds)
             validate_dirac(paths.dirac)
+        elif stage == "plots":
+            generate_plots(
+                pipeline_plan.final_products,
+                paths.plots,
+                clean=request.clean,
+                level=request.plot_level,
+                dpi=request.plot_dpi,
+                variables=request.plot_variables,
+            )
+            validate_plots(paths.plots)
         else:  # defensive: StageName is closed above
             raise AssertionError(stage)
     return pipeline_plan
@@ -249,5 +275,7 @@ def validate(config: Mapping[str, object], stage: StageName, paths: PipelinePath
         validate_so(paths.so, variant=variant)
     elif stage == "dirac":
         validate_dirac(paths.dirac)
+    elif stage == "plots":
+        validate_plots(paths.plots)
     else:
         raise ConfigurationError(f"Etapa inválida: {stage}")
