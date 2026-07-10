@@ -18,6 +18,7 @@ A matriz B reutilizável é um conjunto de produtos, não um NetCDF único:
 ```text
 BFLOW  -> FULL_f24.nc, FULL_f48.nc, PTB_f48mf24.nc
 VBAL   -> mpas_vbal.nc, mpas_sampling.nc e produtos locais
+UNBALANCE -> samplesUnbalanced/PTB_f48mf24_*.nc
 HDIAG  -> mpas.stddev.nc, mpas.cor_rh.nc, mpas.cor_rv.nc
 NICAS  -> mpas_nicas.nc, mpas_nicas_local_*, mpas_nicas_grids_local_*,
           mpas.nicas_norm.nc e mpas.dirac_nicas.nc
@@ -28,6 +29,54 @@ DIRAC  -> mpas.dirac.nc (resposta da B completa a um impulso)
 A configuração e o layout dos produtos correspondem ao contrato científico
 do projeto. DIRAC é renderizado a partir dos parâmetros declarados em `dirac` e
 usa a mesma composição SABER de NICAS + StdDev + VBAL + Control2Analysis.
+
+Na leitura local de `BUMP_NICAS`, SO e DIRAC separam explicitamente as grades
+por dimensionalidade vertical: `stream_function`, `velocity_potential`,
+`temperature` e `spechum` ficam na grade 3D, enquanto `surface_pressure` fica
+sozinha na grade 2D. O produto NICAS merge continua contendo todos os grupos,
+mas essa divisão evita que o BUMP aplique `nl0=55` ao grupo `surface_pressure`,
+que e gravado com `nl0=1`.
+
+SO e DIRAC aplicam `Control2Analysis` no espaço canônico interno do JEDI/OOPS
+(`eastward_wind`, `northward_wind`, `air_temperature`,
+`water_vapor_mixing_ratio_wrt_moist_air`, `air_pressure_at_surface`). O stream
+MPAS, porém, grava apenas variáveis registradas no MPAS Registry. Assim,
+`SO/an.*.nc` é uma saída MPAS-nativa (`uReconstruct*`, `theta`, `qv`,
+`surface_pressure`, etc.), não um arquivo no espaço canônico JEDI. A resposta
+canônica do SO deve ser conferida no log/OOPS ou por uma futura saída
+diagnóstica dedicada, não pelo stream MPAS padrão.
+
+Nos blocos de alias, `in code` é o nome esperado internamente pelo código
+novo MPAS-JEDI/SABER/OOPS, enquanto `in file` é o nome gravado nos produtos
+NetCDF da B. Esse alias é consumido por JEDI/SABER/BUMP ao ler os produtos da
+B; ele não é aplicado pelo parser de streams do MPAS. Portanto,
+SO e DIRAC reutilizam os arquivos `streams.atmosphere_240km` e
+`stream_list.atmosphere.*` compatíveis com a física, packages e Registry da
+configuração original. Não se deve criar manualmente uma lista mínima de campos
+de análise sem validá-la contra o parser MPAS; mesmo campos MPAS nativos podem
+ser rejeitados nessa combinação. O diagnóstico numérico da resposta canônica
+deve ser uma etapa futura separada, por exemplo via saída diagnóstica
+JEDI/FieldSet ou mecanismo específico.
+
+## Etapa UNBALANCE
+
+O fluxo científico é:
+
+```text
+BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC
+```
+
+VBAL calibra os coeficientes da transformação vertical `K2`. UNBALANCE aplica
+`K2^-1` aos PTBs centrados por meio de `mpasjedi_unbalance_ensemble.x` e grava
+`samplesUnbalanced`. Esses arquivos não são os PTBs brutos: são anomalias
+centradas no espaço desbalanceado, usadas como entrada exclusiva do HDIAG.
+
+O tutorial NCAR declara `samplesUnbalanced` como entrada do HDIAG, mas o fluxo
+público atual não fornece uma escrita reproduzível desses membros. Por isso a
+aplicação de `K2^-1` é uma etapa explícita, com PBS, manifesto e validação de
+CDF5. A reversibilidade foi verificada numericamente por round-trip:
+`K2(K2^-1(PTB_i - mean(PTB))) ~= PTB_i - mean(PTB)` para os quatro membros e
+as cinco variáveis de controle.
 
 ## Instalação
 
@@ -71,6 +120,27 @@ mpas-bmatrix build \
   --config configs/jaci-x1.10242.yaml \
   --manifest /dados/nmc/manifest.tsv \
   --to-stage nicas
+```
+
+Executar apenas a aplicação de `K2^-1` a partir de um workspace BFLOW já
+preparado e com VBAL validado:
+
+```bash
+mpas-bmatrix build \
+  --config configs/jaci-x1.10242.yaml \
+  --bflow-workspace /caminho/para/workspace-bflow \
+  --from-stage unbalance \
+  --to-stage unbalance
+```
+
+Executar UNBALANCE seguido de HDIAG:
+
+```bash
+mpas-bmatrix build \
+  --config configs/jaci-x1.10242.yaml \
+  --bflow-workspace /caminho/para/workspace-bflow \
+  --from-stage unbalance \
+  --to-stage hdiag
 ```
 
 ## PBS progress display

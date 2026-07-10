@@ -85,7 +85,7 @@ def toolbox_exe(config: Mapping[str, object]) -> Path:
 def vbal_date(vbal_root: str | Path) -> str:
     """Read the calibration date from a rendered VBAL YAML file."""
     text = require_file(Path(vbal_root) / "VBAL" / "run_vbal.yaml", "run_vbal.yaml").read_text()
-    match = re.search(r"(?m)^\s*date:\s*&date\s+'([^']+)'", text)
+    match = re.search(r"(?m)^\s*date:\s*(?:&date\s*)?['\"]?([^'\"\n ]+)", text)
     if not match:
         raise RuntimeError("Data principal não encontrada no run_vbal.yaml")
     return match.group(1)

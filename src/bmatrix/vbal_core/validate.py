@@ -28,7 +28,6 @@ def validate(workspace: str | Path) -> bool:
     sampling_local = sorted(run_dir.glob("mpas_sampling_local_*"))
     vbal_local = sorted(run_dir.glob("mpas_vbal_local_*"))
     original_outputs = sorted((root / "samples").glob(f"{stem}_*.nc"))
-    unbalanced_outputs = sorted((root / "samplesUnbalanced").glob(f"{stem}_*.nc"))
 
     if not log.is_file():
         errors.append("run_vbal.runlog ausente")
@@ -41,11 +40,6 @@ def validate(workspace: str | Path) -> bool:
     errors.extend(validate_ranked_products(vbal_local, "mpas_vbal_local"))
     if not original_outputs:
         errors.append(f"nenhuma amostra original encontrada em samples/{stem}_*.nc")
-    if len(unbalanced_outputs) != len(original_outputs):
-        errors.append(
-            "amostras unbalanced incompletas: "
-            f"esperadas={len(original_outputs)}, geradas={len(unbalanced_outputs)}"
-        )
 
     print("=== VBAL validation ===")
     print(f"WORKSPACE={root}")
@@ -56,7 +50,6 @@ def validate(workspace: str | Path) -> bool:
     print(f"SAMPLING_LOCAL={len(sampling_local)}")
     print(f"VBAL_LOCAL={len(vbal_local)}")
     print(f"ORIGINAL_SAMPLES={len(original_outputs)}")
-    print(f"UNBALANCED_SAMPLES={len(unbalanced_outputs)}")
 
     if errors:
         print("Problemas:")

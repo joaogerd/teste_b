@@ -8,9 +8,15 @@ from typing import Any
 import yaml
 
 from ..scheduler import bmatrix_job_spec, render_pbs
-from ..scientific_config import control_file_names, normalize_control, section
+from ..scientific_config import (
+    control_aliases,
+    control_code_names,
+    normalize_control_code,
+    require_background_covers_analysis,
+    section,
+)
 from ..shell import write_text
-from ..vbal_core.config_files import render_vbal_relations
+from ..so_core.config_files import nicas_read_grids, render_vbal_code_relations, vbal_read_aliases
 from ..vbal_core.model import toolbox_exe
 
 
@@ -24,7 +30,7 @@ def _number_list(value: object, name: str) -> list[float]:
         raise ValueError(f"{name} deve conter apenas números.") from exc
 
 
-def _settings(config: Mapping[str, Any]) -> dict[str, object]:
+def _settings(config: Mapping[str, Any], analysis_variables: list[str]) -> dict[str, object]:
     """Return validated, explicit DIRAC settings from the scientific contract."""
     raw = section(config, "dirac")
     latitudes = _number_list(raw.get("latitudes"), "dirac.latitudes")
@@ -34,18 +40,23 @@ def _settings(config: Mapping[str, Any]) -> dict[str, object]:
     index = int(raw.get("index", 1))
     if not 1 <= index <= len(latitudes):
         raise ValueError("dirac.index deve selecionar um ponto configurado.")
+    ndir = int(raw.get("ndir", 1))
+    if ndir < 1:
+        raise ValueError("dirac.ndir deve ser positivo.")
     variable = raw.get("variable")
     if not isinstance(variable, str):
         raise ValueError("dirac.variable deve ser uma variável de controle declarada.")
-    background_variables = raw.get("background_variables")
-    if not isinstance(background_variables, list) or not all(isinstance(item, str) for item in background_variables):
-        raise ValueError("dirac.background_variables deve ser uma lista de strings.")
+    background_variables = require_background_covers_analysis(
+        raw.get("background_variables", []),
+        analysis_variables,
+        "dirac",
+    )
     return {
-        "ndir": int(raw.get("ndir", 1)),
-        "index": index,
-        "variable": normalize_control(config, variable),
-        "latitudes": latitudes,
-        "longitudes": longitudes,
+        "ndir": ndir,
+        "ildir": index,
+        "variable": normalize_control_code(config, variable),
+        "dirLats": latitudes,
+        "dirLons": longitudes,
         "background_variables": list(background_variables),
     }
 
@@ -61,18 +72,23 @@ def write_dirac_yaml(
     """Render a full-B DIRAC test for the covariance toolbox.
 
     The file applies the same BUMP_NICAS, StdDev, BUMP_VerticalBalance and
-    Control2Analysis composition used by the SO test.  ``output dirac`` is the
-    toolbox output block that writes ``mpas.dirac.nc``.
+    Control2Analysis composition used by the SO test.  The ``dirac`` block
+    follows the covariance toolbox contract used by the validated main branch:
+    full point lists plus singular ``ildir``/``dirvar`` selectors.
     """
-    settings = _settings(config)
-    controls = list(control_file_names(config))
+    controls = list(control_code_names(config))
     nicas = section(config, "nicas")
     vbal = section(config, "vbal")
+    single = section(config, "single_observation")
+    analysis_variables = list(single.get("analysis_variables", []))
+    settings = _settings(config, analysis_variables)
+    aliases = control_aliases(config)
     data: dict[str, object] = {
         "geometry": {
             "nml_file": "./namelist.atmosphere_240km",
             "streams_file": "./streams.atmosphere_240km",
             "deallocate non-da fields": True,
+            "alias": aliases,
         },
         "background": {
             "state variables": settings["background_variables"],
@@ -89,6 +105,7 @@ def write_dirac_yaml(
                     "io": {
                         "data directory": str(nicas_dir),
                         "files prefix": str(nicas.get("files_prefix", "mpas")),
+                        "alias": aliases,
                     },
                     "drivers": {
                         "multivariate strategy": str(
@@ -96,6 +113,7 @@ def write_dirac_yaml(
                         ),
                         "read local nicas": True,
                     },
+                    "grids": nicas_read_grids(config),
                 },
             },
             "saber outer blocks": [
@@ -115,25 +133,31 @@ def write_dirac_yaml(
                         "io": {
                             "data directory": str(vbal_dir),
                             "files prefix": str(vbal.get("files_prefix", "mpas")),
+                            "alias": vbal_read_aliases(config),
                         },
                         "drivers": {"read local sampling": True, "read vertical balance": True},
-                        "vertical balance": {"vbal": render_vbal_relations(config)},
+                        "model": {"nearest 3d level": "bottom"},
+                        "vertical balance": {"vbal": render_vbal_code_relations(config)},
                     },
                 },
             ],
             "linear variable change": {
                 "linear variable change name": "Control2Analysis",
                 "input variables": controls,
-                "output variables": settings["background_variables"],
+                "output variables": analysis_variables,
             },
+        },
+        "dirac": {
+            "ndir": settings["ndir"],
+            "dirLats": settings["dirLats"],
+            "dirLons": settings["dirLons"],
+            "ildir": settings["ildir"],
+            "dirvar": settings["variable"],
         },
         "output dirac": {
             "filename": "./mpas.dirac.nc",
-            "ndir": settings["ndir"],
-            "ildir": settings["index"],
-            "dirvar": settings["variable"],
-            "dirlat": settings["latitudes"],
-            "dirlon": settings["longitudes"],
+            "date": date,
+            "stream name": "control",
         },
     }
     write_text(Path(path), yaml.safe_dump(data, sort_keys=False, allow_unicode=True))

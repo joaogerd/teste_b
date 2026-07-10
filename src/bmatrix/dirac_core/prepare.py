@@ -11,7 +11,9 @@ from ..hdiag_core.model import hdiag_date
 from ..nicas_core.checks import check as validate_nicas
 from ..nicas_core.static import link_nicas_support
 from ..products import BMatrixProducts
+from ..scientific_config import require_background_covers_analysis, section
 from ..shell import require_file, write_text
+from ..so_core.static import create_jedi_background
 from ..vbal_core.validate import validate as validate_vbal
 from .config_files import write_dirac_pbs, write_dirac_yaml
 from .model import dirac_workspace
@@ -44,6 +46,16 @@ def prepare(
     output.mkdir(parents=True, exist_ok=True)
     hdiag_run = hdiag_root / "HDIAG"
     link_nicas_support(hdiag_run, output)
+    templates = sorted(hdiag_run.glob("templateFields.*.nc"))
+    if len(templates) != 1:
+        raise RuntimeError("Esperado exatamente um templateFields.*.nc no workspace HDIAG para preparar DIRAC.")
+    single = section(config, "single_observation")
+    background_variables = require_background_covers_analysis(
+        section(config, "dirac").get("background_variables", []),
+        single.get("analysis_variables", []),
+        "dirac",
+    )
+    create_jedi_background(templates[0], output / "bg.nc", background_variables, "DIRAC")
     date = hdiag_date(hdiag_root)
     write_dirac_yaml(
         config,

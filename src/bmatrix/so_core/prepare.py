@@ -10,7 +10,7 @@ from ..hdiag_core.checks import check as validate_hdiag
 from ..hdiag_core.model import hdiag_date
 from ..nicas_core.checks import check as validate_nicas
 from ..products import BMatrixProducts
-from ..scientific_config import section
+from ..scientific_config import require_background_covers_analysis, section
 from ..shell import require_file, write_text
 from ..vbal_core.validate import validate as validate_vbal
 from .config_files import write_so_pbs, write_so_t_only_diagnostic_pbs, write_so_yaml
@@ -49,9 +49,12 @@ def prepare(
         shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
     template = link_so_support(hdiag_root / "HDIAG", output)
-    background_variables = section(config, "single_observation").get("background_variables", [])
-    if not isinstance(background_variables, list) or not all(isinstance(name, str) for name in background_variables):
-        raise ValueError("single_observation.background_variables deve ser uma lista de strings.")
+    single = section(config, "single_observation")
+    background_variables = require_background_covers_analysis(
+        single.get("background_variables", []),
+        single.get("analysis_variables", []),
+        "single_observation",
+    )
     create_so_background(template, output / "bg_so.nc", background_variables)
     write_so_yaml(config, output / artifacts["yaml"], hdiag_date(hdiag_root), products.nicas.parent, products.stddev, products.vbal.parent, variant=variant)
     write_so_pbs(config, output, variant=variant)

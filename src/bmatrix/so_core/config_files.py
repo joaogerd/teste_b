@@ -8,8 +8,15 @@ from typing import Any, Mapping
 import yaml
 
 from ..scheduler import bmatrix_job_spec, render_pbs
-from ..scientific_config import control_file_names, section
-from ..vbal_core.config_files import render_vbal_relations
+from ..scientific_config import (
+    control_aliases,
+    control_code_names,
+    control_read_grids,
+    normalize_control_code,
+    require_background_covers_analysis,
+    section,
+    vbal_composite_aliases,
+)
 from ..shell import write_text
 from .model import so_artifacts, variational_exe
 
@@ -58,6 +65,41 @@ def _observers(config: Mapping[str, Any], variant: str, epoch: str) -> list[dict
     return result
 
 
+def nicas_read_grids(config: Mapping[str, Any]) -> list[dict[str, dict[str, list[str]]]]:
+    """Split NICAS read grids by vertical dimension."""
+    return control_read_grids(config)
+
+
+def vbal_read_aliases(config: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Return simple and pair-group aliases needed to read VBAL products."""
+    vbal = section(config, "vbal")
+    return control_aliases(config) + vbal_composite_aliases(config, vbal.get("group_variable_order"))
+
+
+def render_vbal_code_relations(config: Mapping[str, Any]) -> list[dict[str, object]]:
+    """Render VBAL relations in canonical JEDI control names for B application."""
+    vbal = section(config, "vbal")
+    raw_relations = vbal.get("relations", [])
+    if not isinstance(raw_relations, list):
+        raise ValueError("vbal.relations deve ser uma lista.")
+    relations: list[dict[str, object]] = []
+    for raw in raw_relations:
+        if not isinstance(raw, Mapping):
+            raise ValueError("Cada item de vbal.relations deve ser um bloco YAML.")
+        balanced = raw.get("balanced_variable")
+        unbalanced = raw.get("unbalanced_variable")
+        if not isinstance(balanced, str) or not isinstance(unbalanced, str):
+            raise ValueError("Cada relação VBAL requer balanced_variable e unbalanced_variable.")
+        relation: dict[str, object] = {
+            "balanced variable": normalize_control_code(config, balanced),
+            "unbalanced variable": normalize_control_code(config, unbalanced),
+        }
+        if "diagonal_regression" in raw:
+            relation["diagonal regression"] = bool(raw["diagonal_regression"])
+        relations.append(relation)
+    return relations
+
+
 def write_so_yaml(
     config: Mapping[str, Any],
     path: str | Path,
@@ -74,10 +116,15 @@ def write_so_yaml(
     before = int(single.get("window_hours_before_analysis", 3))
     window_hours = int(single.get("window_hours", 6))
     window_begin = (analysis_date - timedelta(hours=before)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    controls = list(control_file_names(config))
+    controls = list(control_code_names(config))
     analysis_variables = list(single.get("analysis_variables", []))
-    background_variables = list(single.get("background_variables", []))
-    relations = render_vbal_relations(config)
+    background_variables = require_background_covers_analysis(
+        single.get("background_variables", []),
+        analysis_variables,
+        "single_observation",
+    )
+    relations = render_vbal_code_relations(config)
+    aliases = control_aliases(config)
     data = {
         "output": {"filename": "./an.$Y-$M-$D_$h.$m.$s.nc", "stream name": "analysis"},
         "variational": {
@@ -96,7 +143,12 @@ def write_so_yaml(
             "cost type": "3D-Var",
             "time window": {"begin": window_begin, "length": f"PT{window_hours}H"},
             "jb evaluation": False,
-            "geometry": {"nml_file": "./namelist.atmosphere_240km", "streams_file": "./streams.atmosphere_240km", "deallocate non-da fields": True},
+            "geometry": {
+                "nml_file": "./namelist.atmosphere_240km",
+                "streams_file": "./streams.atmosphere_240km",
+                "deallocate non-da fields": True,
+                "alias": aliases,
+            },
             "analysis variables": analysis_variables,
             "background": {
                 "state variables": background_variables,
@@ -110,8 +162,13 @@ def write_so_yaml(
                     "saber block name": "BUMP_NICAS",
                     "active variables": controls,
                     "read": {
-                        "io": {"data directory": str(nicas_dir), "files prefix": str(section(config, "nicas").get("files_prefix", "mpas"))},
+                        "io": {
+                            "data directory": str(nicas_dir),
+                            "files prefix": str(section(config, "nicas").get("files_prefix", "mpas")),
+                            "alias": aliases,
+                        },
                         "drivers": {"multivariate strategy": str(section(config, "nicas").get("drivers", {}).get("multivariate strategy", "univariate")), "read local nicas": True},
+                        "grids": nicas_read_grids(config),
                     },
                 },
                 "saber outer blocks": [
@@ -119,8 +176,13 @@ def write_so_yaml(
                     {
                         "saber block name": "BUMP_VerticalBalance",
                         "read": {
-                            "io": {"data directory": str(vbal_dir), "files prefix": str(section(config, "vbal").get("files_prefix", "mpas"))},
+                            "io": {
+                                "data directory": str(vbal_dir),
+                                "files prefix": str(section(config, "vbal").get("files_prefix", "mpas")),
+                                "alias": vbal_read_aliases(config),
+                            },
                             "drivers": {"read local sampling": True, "read vertical balance": True},
+                            "model": {"nearest 3d level": "bottom"},
                             "vertical balance": {"vbal": relations},
                         },
                     },

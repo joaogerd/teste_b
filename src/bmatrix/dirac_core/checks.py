@@ -4,6 +4,18 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+DIRAC_PRODUCT = "mpas.dirac.nc"
+
+
+def _is_netcdf(path: Path) -> bool:
+    import netCDF4
+
+    try:
+        with netCDF4.Dataset(path):
+            return True
+    except OSError:
+        return False
+
 
 def check(workspace: str | Path) -> bool:
     """Validate the toolbox success marker and ``mpas.dirac.nc`` output."""
@@ -15,8 +27,11 @@ def check(workspace: str | Path) -> bool:
         errors.append("run_dirac.runlog ausente")
     if "Finishing oops::ErrorCovarianceToolbox<MPAS> with status = 0" not in text:
         errors.append("status final de sucesso ausente no run_dirac.runlog")
-    if not (root / "mpas.dirac.nc").is_file():
-        errors.append("produto DIRAC ausente: mpas.dirac.nc")
+    product = root / DIRAC_PRODUCT
+    if not product.is_file():
+        errors.append(f"produto DIRAC ausente: {DIRAC_PRODUCT}")
+    elif not _is_netcdf(product):
+        errors.append(f"produto DIRAC não é NetCDF válido: {DIRAC_PRODUCT}")
     combined = "\n".join(
         path.read_text(errors="replace")
         for path in (runlog, root / "stdout.log", root / "stderr.log")
