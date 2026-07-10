@@ -1,10 +1,10 @@
-"""Optional map-background enhancements for B-matrix plotting.
+"""Optional map-background and color-palette enhancements for B-matrix plotting.
 
 This module monkey-patches selected helpers from ``plots_core.runner``. It is
 kept separate so the main plotting stage remains usable without Cartopy; when
 Cartopy is available, local/global spatial diagnostics gain coastlines and
-geographic gridlines. When Cartopy is unavailable, the original Matplotlib
-fallback still runs.
+geographic gridlines. When Cartopy is unavailable, the Matplotlib fallback still
+runs.
 """
 from __future__ import annotations
 
@@ -18,6 +18,11 @@ DIRAC_LOCAL_DLAT = 28.0
 DIRAC_MIN_SIGNAL = 1.0e-10
 GLOBAL_MIN_RANGE = 1.0e-12
 
+# Publication-style palettes following SciFig guidance:
+# - sequential: ordered magnitude, light-to-dark single hue;
+# - diverging: fields centered on zero, blue for negative and muted red for positive.
+SCIFIG_SEQUENTIAL = ("#F7FBFF", "#9ECAE1", "#4292C6", "#08519C")
+SCIFIG_DIVERGING = ("#2166AC", "#92C5DE", "#F7F7F7", "#F4A582", "#B2182B")
 
 # DIRAC response maps already have a dedicated local diagnostic in 05_dirac.
 # Global DIRAC maps are usually dominated by near-zero fields or offsets and are
@@ -40,6 +45,7 @@ def apply() -> None:
     runner._plot_dirac_spatial = _plot_dirac_spatial
     runner._plot_global_spatial = _plot_global_spatial
     runner._plot_spatial_fields = _plot_spatial_fields
+    runner._plot_latlev = _plot_latlev
 
 
 def _cartopy():
@@ -49,6 +55,16 @@ def _cartopy():
     except Exception:  # pragma: no cover - optional runtime dependency
         return None, None
     return ccrs, cfeature
+
+
+def _scifig_cmap(ctx, kind: str):
+    from matplotlib.colors import LinearSegmentedColormap
+
+    if kind == "diverging":
+        return LinearSegmentedColormap.from_list("bmatrix_scifig_diverging", SCIFIG_DIVERGING)
+    if kind == "sequential":
+        return LinearSegmentedColormap.from_list("bmatrix_scifig_sequential", SCIFIG_SEQUENTIAL)
+    return ctx.plt.get_cmap(kind)
 
 
 def _finish(fig, output, dpi: int, ctx) -> None:
@@ -110,6 +126,48 @@ def _add_map_background(axis, *, extent=None, global_map: bool = False, transfor
         axis.grid(True)
         return None
     return plate
+
+
+def _plot_latlev(latlev, lat, title: str, label: str, unit: str, output: Path, dpi: int, ctx) -> None:
+    """Latitude-level plot using publication-style sequential/diverging palettes."""
+    from . import runner
+
+    values = ctx.np.asarray(latlev, dtype=float)
+    lat = ctx.np.asarray(lat, dtype=float)
+    finite = values[ctx.np.isfinite(values)]
+    if finite.size == 0:
+        return
+
+    vmin, vmax, kind = _limits_and_palette_kind(finite, ctx.np)
+    levels = ctx.np.linspace(vmin, vmax, 17)
+    cmap = _scifig_cmap(ctx, kind)
+
+    fig, axis = ctx.plt.subplots(figsize=(8.4, 5.6))
+    image = axis.contourf(
+        lat,
+        ctx.np.arange(values.shape[0]),
+        ctx.np.ma.masked_invalid(values),
+        levels=levels,
+        cmap=cmap,
+        extend="both",
+    )
+    lines = axis.contour(
+        lat,
+        ctx.np.arange(values.shape[0]),
+        ctx.np.ma.masked_invalid(values),
+        levels=levels[::4],
+        colors="#334155",
+        linewidths=0.45,
+        alpha=0.5,
+    )
+    axis.clabel(lines, inline=True, fontsize=7, fmt="%.2g", colors="#475569")
+    axis.set_title(f"{title} — {label}")
+    axis.set_xlabel("Latitude (°)")
+    axis.set_ylabel("Nível vertical")
+    axis.grid(True)
+    colorbar = fig.colorbar(image, ax=axis, pad=0.018, fraction=0.048)
+    colorbar.set_label(unit)
+    runner._finish(fig, output, dpi, ctx)
 
 
 def _plot_dirac_spatial(
@@ -176,6 +234,7 @@ def _plot_dirac_spatial(
     label = runner.CONTROL_LABELS.get(name, name)
     fig.suptitle(f"Resposta espacial da B: {label} a um impulso em $T_u$ (DIRAC)", fontsize=17)
     norm = ctx.plt.Normalize(vmin=-maximum, vmax=maximum)
+    cmap = _scifig_cmap(ctx, "diverging")
     artist = None
 
     for axis, field, item in zip(axes, display_fields, levels):
@@ -193,7 +252,7 @@ def _plot_dirac_spatial(
                 field[signal],
                 norm,
                 ctx,
-                cmap="coolwarm",
+                cmap=cmap,
                 transform=transform,
             )
             scatter_kwargs = {"transform": transform} if transform is not None else {}
@@ -215,7 +274,7 @@ def _plot_dirac_spatial(
                 field[signal],
                 norm,
                 ctx,
-                cmap="coolwarm",
+                cmap=cmap,
                 transform=None,
             )
             axis.scatter([0.0], [lat0], marker="x", s=105, color=runner.FG, linewidths=2.2)
@@ -326,8 +385,9 @@ def _plot_global_spatial(
     finite_values = values[finite]
     if not _is_informative(finite_values, np, abs_tol=GLOBAL_MIN_RANGE):
         return
-    vmin, vmax, cmap = _global_limits_and_cmap(finite_values, np)
+    vmin, vmax, kind = _global_limits_and_cmap(finite_values, np)
     norm = ctx.plt.Normalize(vmin=vmin, vmax=vmax)
+    cmap = _scifig_cmap(ctx, kind)
 
     ccrs, _ = _cartopy()
     has_map = ccrs is not None
@@ -407,10 +467,10 @@ def _robust_abs_limit(fields, np) -> float:
     return limit * 1.05 if np.isfinite(limit) else 0.0
 
 
-def _global_limits_and_cmap(values, np):
+def _limits_and_palette_kind(values, np):
     finite = values[np.isfinite(values)]
     if finite.size == 0:
-        return -1.0, 1.0, "coolwarm"
+        return -1.0, 1.0, "diverging"
     vmin = float(np.nanpercentile(finite, 2.0))
     vmax = float(np.nanpercentile(finite, 98.0))
     if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
@@ -418,11 +478,15 @@ def _global_limits_and_cmap(values, np):
         vmax = float(np.nanmax(finite))
     if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin == vmax:
         center = 0.0 if not np.isfinite(vmin) else vmin
-        return center - 1.0, center + 1.0, "viridis"
+        return center - 1.0, center + 1.0, "sequential"
     if vmin < 0.0 < vmax:
         amplitude = max(abs(vmin), abs(vmax))
-        return -amplitude, amplitude, "coolwarm"
-    return vmin, vmax, "viridis"
+        return -amplitude, amplitude, "diverging"
+    return vmin, vmax, "sequential"
+
+
+def _global_limits_and_cmap(values, np):
+    return _limits_and_palette_kind(values, np)
 
 
 def _is_informative(values, np, *, abs_tol: float) -> bool:
@@ -439,9 +503,11 @@ def _is_informative(values, np, *, abs_tol: float) -> bool:
     return spread > max(abs_tol, amplitude * 1.0e-8)
 
 
-def _spatial_artist(axis, x, y, values, norm, ctx, *, cmap="coolwarm", transform=None):
+def _spatial_artist(axis, x, y, values, norm, ctx, *, cmap="diverging", transform=None):
     values = ctx.np.asarray(values, dtype=float)
     kwargs = {"transform": transform} if transform is not None else {}
+    if isinstance(cmap, str):
+        cmap = _scifig_cmap(ctx, cmap)
     levels = ctx.np.linspace(norm.vmin, norm.vmax, CONTOUR_LEVELS)
     if len(values) >= 20:
         try:
