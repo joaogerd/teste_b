@@ -133,6 +133,7 @@ The documentation is separated by audience.
 | [`docs/architecture.md`](docs/architecture.md) | Internal module architecture and stage lifecycle. |
 | [`docs/testing.md`](docs/testing.md) | Unit, integration and JACI smoke testing guidance. |
 | [`docs/diagnostics-and-plots.md`](docs/diagnostics-and-plots.md) | Diagnostic plotting outputs and style conventions. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Top-level contribution checklist. |
 
 ## Development checks
 
