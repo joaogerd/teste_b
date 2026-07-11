@@ -7,7 +7,7 @@ case on JACI.
 
 ```bash
 cd /p/projetos/monan_das/joao.gerd/projects/teste_b
-source /p/projetos/monan_das/joao.gerd/projects/mpas-bmatrix-global/scripts/load_jaci_env.sh
+source scripts/load_jaci_env.sh
 ```
 
 Set the standard inputs:
