@@ -3,7 +3,7 @@
 # Load JACI MPAS-JEDI environment
 # =============================================================================
 #
-# This script must be sourced:
+# This script must be sourced from this repository:
 #
 #   source scripts/load_jaci_env.sh
 #
@@ -11,9 +11,21 @@
 #   - mpas_atmosphere
 #   - mpas_init_atmosphere
 #   - mpasjedi_error_covariance_toolbox.x
+#   - mpasjedi_unbalance_ensemble.x / mpasjedi_process_perts.x when available
 #   - gpmetis
 #   - ncdump
 #   - Cray MPICH/libfabric runtime
+#
+# Required before first use:
+#
+#   export STACK_ROOT=/path/to/spack-stack
+#
+# Optional overrides:
+#
+#   export STACK_ENV_NAME=jaci-mpas-jedi-gcc12-craympich
+#   export STACK_SITE_SETUP=configs/sites/tier2/jaci/setup.sh
+#   export STACK_ENV_MODULE=cray-mpich/8.1.31/none/none/jedi-mpas-env/1.0.0
+#   export STACK_MODULE_ROOT=${STACK_ROOT}/envs/${STACK_ENV_NAME}/modules
 #
 # Idempotency:
 #   If the target jedi-mpas-env module is already loaded, this script returns
@@ -30,14 +42,27 @@
 # options would affect the user's interactive shell.
 
 __JACI_ENV_OLDPWD="$(pwd)"
-
-export STACK_ROOT=/p/projetos/monan_das/joao.gerd/work/spack-stack-inpe-overlay-20260515T181917Z/spack-stack
-export STACK_ENV_NAME=jaci-mpas-jedi-gcc12-craympich
-export STACK_MODULE_ROOT=${STACK_ROOT}/envs/${STACK_ENV_NAME}/modules
-export STACK_SITE_SETUP=configs/sites/tier2/jaci/setup.sh
-export STACK_ENV_MODULE=cray-mpich/8.1.31/none/none/jedi-mpas-env/1.0.0
-
 __JACI_ENV_FORCE="${JACI_FORCE_RELOAD:-false}"
+
+if [[ -z "${STACK_ROOT:-}" ]]; then
+  echo "ERRO: STACK_ROOT is not set."
+  echo "Set it to the root of the spack-stack checkout/environment, for example:"
+  echo "  export STACK_ROOT=/path/to/spack-stack"
+  unset __JACI_ENV_OLDPWD __JACI_ENV_FORCE
+  return 1 2>/dev/null || exit 1
+fi
+
+if [[ ! -d "${STACK_ROOT}" ]]; then
+  echo "ERRO: STACK_ROOT does not exist or is not a directory: ${STACK_ROOT}"
+  unset __JACI_ENV_OLDPWD __JACI_ENV_FORCE
+  return 1 2>/dev/null || exit 1
+fi
+
+export STACK_ROOT
+export STACK_ENV_NAME="${STACK_ENV_NAME:-jaci-mpas-jedi-gcc12-craympich}"
+export STACK_MODULE_ROOT="${STACK_MODULE_ROOT:-${STACK_ROOT}/envs/${STACK_ENV_NAME}/modules}"
+export STACK_SITE_SETUP="${STACK_SITE_SETUP:-configs/sites/tier2/jaci/setup.sh}"
+export STACK_ENV_MODULE="${STACK_ENV_MODULE:-cray-mpich/8.1.31/none/none/jedi-mpas-env/1.0.0}"
 
 # If already loaded, do not reload. Reloading the full stack on top of itself can
 # trigger module conflicts such as gcc-native/12.3 versus Spack gcc/12.3.0/*
@@ -93,17 +118,17 @@ if ! module load "${STACK_ENV_MODULE}"; then
 fi
 
 # Build/runtime compiler variables expected on JACI with CrayPE.
-export CC=/opt/cray/pe/craype/2.7.33/bin/cc
-export CXX=/opt/cray/pe/craype/2.7.33/bin/CC
-export FC=/opt/cray/pe/craype/2.7.33/bin/ftn
-export F77="${FC}"
-export F90="${FC}"
+export CC="${CC:-/opt/cray/pe/craype/2.7.33/bin/cc}"
+export CXX="${CXX:-/opt/cray/pe/craype/2.7.33/bin/CC}"
+export FC="${FC:-/opt/cray/pe/craype/2.7.33/bin/ftn}"
+export F77="${F77:-${FC}}"
+export F90="${F90:-${FC}}"
 
-export MPICC="${CC}"
-export MPICXX="${CXX}"
-export MPIFC="${FC}"
-export MPIF77="${FC}"
-export MPIF90="${FC}"
+export MPICC="${MPICC:-${CC}}"
+export MPICXX="${MPICXX:-${CXX}}"
+export MPIFC="${MPIFC:-${FC}}"
+export MPIF77="${MPIF77:-${FC}}"
+export MPIF90="${MPIF90:-${FC}}"
 
 # Cray compiler wrappers on JACI may need this when invoked outside the usual
 # build system context.
