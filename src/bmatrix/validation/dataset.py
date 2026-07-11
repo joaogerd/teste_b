@@ -50,7 +50,7 @@ def write_diff_dataset(
                 continue
             if old[name].shape != new[name].shape:
                 continue
-            if not old[name].dtype.kind in "iufc" or not new[name].dtype.kind in "iufc":
+            if old[name].dtype.kind not in "iufc" or new[name].dtype.kind not in "iufc":
                 continue
             diff_vars[name] = new[name] - old[name]
         if not diff_vars:

@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import load_config
 from .errors import BMatrixError
 from .pipeline import BuildRequest, STAGES, build, generate_weights, plan, validate
+from .plots_core.runner import generate_plots
 
 DEFAULT_CONFIG = "configs/jaci-x1.10242.yaml"
 
@@ -25,6 +26,18 @@ def _add_pair_source(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--end-valid-time", help="Fim inclusivo YYYY-MM-DD_HH:MM:SS.")
     parser.add_argument("--valid-interval-hours", type=int, default=24)
     parser.add_argument("--dt", type=int, help="Passo de tempo MPAS; padrão vem de runtime.config_dt.")
+
+
+def _add_plot_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--plot-level", type=int, default=30, help="Índice vertical usado para variáveis 3D.")
+    parser.add_argument("--plot-dpi", type=int, default=150, help="Resolução das figuras PNG.")
+    parser.add_argument(
+        "--plot-variables",
+        nargs="+",
+        default=None,
+        help="Variáveis preferenciais a plotar; por padrão usa controles comuns da B.",
+    )
+    parser.add_argument("--plots-workspace", type=Path, help="Workspace de saída para figuras e resumos.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     weights.add_argument("--force", action="store_true", help="Regenera ambos os arquivos de peso.")
     weights.set_defaults(handler=_weights)
 
-    build_command = sub.add_parser("build", help="Executa sequencialmente BFLOW, VBAL, UNBALANCE, HDIAG, NICAS, SO e DIRAC.")
+    build_command = sub.add_parser("build", help="Executa BFLOW, VBAL, UNBALANCE, HDIAG, NICAS, SO, DIRAC e PLOTS.")
     _add_common(build_command)
     _add_pair_source(build_command)
     build_command.add_argument("--from-stage", choices=STAGES, default="bflow")
@@ -55,6 +68,7 @@ def build_parser() -> argparse.ArgumentParser:
     build_command.add_argument("--poll-seconds", type=int, default=30)
     build_command.add_argument("--nicas-parallel", action="store_true", help="Submete controles NICAS em paralelo com merge afterok.")
     build_command.add_argument("--so-variant", default="default", choices=("default", "t-only", "u-only"))
+    _add_plot_options(build_command)
     build_command.add_argument("--dry-run", action="store_true", help="Mostra o plano sem criar arquivos ou submeter jobs.")
     build_command.set_defaults(handler=_build)
 
@@ -64,6 +78,13 @@ def build_parser() -> argparse.ArgumentParser:
     validate_command.add_argument("--stage", required=True, choices=STAGES)
     validate_command.add_argument("--so-variant", default="default", choices=("default", "t-only", "u-only"))
     validate_command.set_defaults(handler=_validate)
+
+    plots = sub.add_parser("plots", help="Gera figuras e resumos dos produtos finais da matriz B.")
+    _add_common(plots)
+    _add_pair_source(plots)
+    _add_plot_options(plots)
+    plots.add_argument("--clean", action="store_true", help="Remove figuras/resumos anteriores antes de gerar.")
+    plots.set_defaults(handler=_plots)
 
     products = sub.add_parser("products", help="Mostra os produtos reutilizáveis da matriz B para um workspace BFLOW.")
     _add_common(products)
@@ -87,6 +108,10 @@ def _request(args: argparse.Namespace, *, dry_run: bool = False) -> BuildRequest
         poll_seconds=getattr(args, "poll_seconds", 30),
         nicas_parallel=getattr(args, "nicas_parallel", False),
         so_variant=getattr(args, "so_variant", "default"),
+        plot_level=getattr(args, "plot_level", 30),
+        plot_dpi=getattr(args, "plot_dpi", 150),
+        plot_variables=tuple(getattr(args, "plot_variables", None) or ()),
+        plots_workspace=getattr(args, "plots_workspace", None),
         dry_run=dry_run or getattr(args, "dry_run", False),
     )
 
@@ -118,6 +143,22 @@ def _validate(args: argparse.Namespace) -> int:
     resolved = plan(config, request)
     validate(config, args.stage, resolved.paths, variant=args.so_variant)
     print(f"SUCCESS: {args.stage} validado.")
+    return 0
+
+
+def _plots(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    request = _request(args)
+    resolved = plan(config, request)
+    output = generate_plots(
+        resolved.final_products,
+        resolved.paths.plots,
+        clean=args.clean,
+        level=args.plot_level,
+        dpi=args.plot_dpi,
+        variables=args.plot_variables,
+    )
+    print(json.dumps({key: str(value) for key, value in output.items()}, indent=2, sort_keys=True))
     return 0
 
 
