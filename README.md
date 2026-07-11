@@ -57,6 +57,9 @@ configs/
   jaci-x1.10242.yaml        # JACI paths, mesh, executables, PBS and environment
   bmatrix-x1.10242.yaml     # scientific B-matrix contract
 
+scripts/
+  load_jaci_env.sh          # repository-local JACI MPAS-JEDI environment loader
+
 src/bmatrix/
   cli.py                    # single public CLI
   pipeline.py               # dependency-ordered orchestration
@@ -98,10 +101,10 @@ python -m pip install -e ".[diagnostics]"
 python -m pip install -e ".[dev]"
 ```
 
-On JACI, prefer the project environment loader before running the workflow:
+On JACI, source the repository-local environment loader before running the workflow:
 
 ```bash
-source /p/projetos/monan_das/joao.gerd/projects/mpas-bmatrix-global/scripts/load_jaci_env.sh
+source scripts/load_jaci_env.sh
 ```
 
 ## Quick start on JACI
