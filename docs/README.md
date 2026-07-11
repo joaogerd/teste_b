@@ -38,6 +38,7 @@ understand how the implementation works.
 | [`developer-guide.md`](developer-guide.md) | Developer workflow, extension rules, rebuild rules and PR expectations. |
 | [`architecture.md`](architecture.md) | Internal module architecture, configuration layers and stage lifecycle. |
 | [`testing.md`](testing.md) | Unit, integration and JACI smoke testing strategy. |
+| [`../CONTRIBUTING.md`](../CONTRIBUTING.md) | Top-level contribution checklist. |
 | [`refactoring.md`](refactoring.md) | Historical notes from the refactored architecture. |
 
 ## Scope
