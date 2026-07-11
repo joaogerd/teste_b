@@ -1,4 +1,4 @@
-# mpas-bmatrix-global
+# MPAS-BMatrix
 
 Geração dos produtos de uma matriz B estática MPAS-JEDI/SABER a partir de pares
 NMC já existentes. A ferramenta possui **um único executável público**:
