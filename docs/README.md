@@ -3,22 +3,53 @@
 This directory documents `MPAS-BMatrix`, the official MPAS-JEDI/SABER/BUMP
 static B-matrix workflow repository.
 
-## Start here
+The documentation is intentionally separated by audience:
+
+```text
+User/operator docs
+  how to run, what to provide, what each stage produces and how to validate
+
+Scientific/developer docs
+  theory, contracts, architecture, tests and extension rules
+```
+
+## User/operator documentation
+
+Read these when your goal is to run the pipeline or inspect products.
+
+| Document | Purpose |
+| --- | --- |
+| [`user-guide.md`](user-guide.md) | Main user guide: installation, quick start, stage-by-stage execution and acceptance checks. |
+| [`jaci-quickstart.md`](jaci-quickstart.md) | Compact JACI-oriented command sequence. |
+| [`stage-products.md`](stage-products.md) | Inputs, outputs and acceptance criteria for each stage. |
+| [`mpaswf-pairs.md`](mpaswf-pairs.md) | How to generate f024/f048 MPAS NMC forecast pairs and the manifest with `mpaswf`. |
+| [`operations.md`](operations.md) | Troubleshooting, validation commands and operational notes. |
+| [`diagnostics-and-plots.md`](diagnostics-and-plots.md) | Plot products, visual diagnostics and style conventions. |
+
+## Scientific/developer documentation
+
+Read these when your goal is to change code, modify the scientific contract or
+understand how the implementation works.
 
 | Document | Purpose |
 | --- | --- |
 | [`bmatrix-theory.md`](bmatrix-theory.md) | Scientific meaning of the B-matrix and each workflow stage, including explicit UNBALANCE. |
-| [`workflow.md`](workflow.md) | End-to-end ownership from external `mpaswf` pairs to B-matrix products. |
-| [`mpaswf-pairs.md`](mpaswf-pairs.md) | How to generate f024/f048 MPAS NMC forecast pairs and the manifest with `mpaswf`. |
-| [`scientific-contract.md`](scientific-contract.md) | Variable names, aliases, SABER/BUMP blocks, `Control2Analysis`, UNBALANCE and DIRAC contract. |
-| [`jaci-quickstart.md`](jaci-quickstart.md) | Generic JACI-oriented commands for cloning, installing and running. |
-| [`diagnostics-and-plots.md`](diagnostics-and-plots.md) | Plot products, visual diagnostics and style conventions. |
-| [`operations.md`](operations.md) | Validation, manifests, failure triage and maintenance rules. |
-| [`refactoring.md`](refactoring.md) | Summary of the refactored architecture. |
+| [`scientific-contract.md`](scientific-contract.md) | Variable names, aliases, SABER/BUMP blocks, `Control2Analysis`, UNBALANCE and DIRAC invariants. |
+| [`developer-guide.md`](developer-guide.md) | Developer workflow, extension rules, rebuild rules and PR expectations. |
+| [`architecture.md`](architecture.md) | Internal module architecture, configuration layers and stage lifecycle. |
+| [`testing.md`](testing.md) | Unit, integration and JACI smoke testing strategy. |
+| [`refactoring.md`](refactoring.md) | Historical notes from the refactored architecture. |
 
 ## Scope
 
-The repository owns the stages starting at BFLOW:
+The full operational order is:
+
+```text
+mpaswf -> BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC -> PLOTS
+```
+
+`mpaswf` is external and produces the forecast-pair manifest. This repository
+owns the stages starting at BFLOW:
 
 ```text
 BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC -> PLOTS
@@ -26,7 +57,7 @@ BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC -> PLOTS
 
 The repository does not own GFS download, WPS/ungrib, MPAS initialization or
 forecast integration. In the current operational chain those upstream products
-are generated with `mpaswf`, then passed into this package as NMC pairs or an
+are generated with `mpaswf`, then passed into `MPAS-BMatrix` as NMC pairs or an
 already prepared BFLOW workspace.
 
 ## Recommended checkout layout
