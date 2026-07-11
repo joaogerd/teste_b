@@ -1,17 +1,17 @@
 # Documentation index
 
-This directory documents the `main` branch of `joaogerd/teste_b`, the
-`mpas-bmatrix-global` package used to build static MPAS-JEDI/SABER/BUMP
-B-matrix products from already generated NMC forecast pairs.
+This directory documents the `main` branch of this repository, the future
+official MPAS-JEDI/SABER/BUMP static B-matrix workflow repository.
 
 ## Start here
 
 | Document | Purpose |
 | --- | --- |
+| [`bmatrix-theory.md`](bmatrix-theory.md) | Scientific meaning of the B-matrix and each workflow stage, including explicit UNBALANCE. |
 | [`workflow.md`](workflow.md) | End-to-end ownership from external `mpaswf` pairs to B-matrix products. |
 | [`mpaswf-pairs.md`](mpaswf-pairs.md) | How to generate f024/f048 MPAS NMC forecast pairs and the manifest with `mpaswf`. |
 | [`scientific-contract.md`](scientific-contract.md) | Variable names, aliases, SABER/BUMP blocks, `Control2Analysis`, UNBALANCE and DIRAC contract. |
-| [`jaci-quickstart.md`](jaci-quickstart.md) | Commands for the validated JACI x1.10242 workflow. |
+| [`jaci-quickstart.md`](jaci-quickstart.md) | Generic JACI-oriented commands for cloning, installing and running. |
 | [`diagnostics-and-plots.md`](diagnostics-and-plots.md) | Plot products, visual diagnostics and style conventions. |
 | [`operations.md`](operations.md) | Validation, manifests, failure triage and maintenance rules. |
 | [`refactoring.md`](refactoring.md) | Summary of the refactored architecture. |
