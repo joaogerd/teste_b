@@ -8,15 +8,15 @@ Use generic roots and adapt only these exports to the local system:
 
 ```bash
 export PROJECT_ROOT=/path/to/projects
-export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+export WORK_ROOT=/path/to/work/MPAS-BMatrix
 
 mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
 cd "$PROJECT_ROOT"
 
-git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/MPAS-BMatrix.git
 git clone https://github.com/joaogerd/mpaswf.git
 
-export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export BMATRIX_ROOT="$PROJECT_ROOT/MPAS-BMatrix"
 export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
 ```
 
