@@ -19,16 +19,16 @@ Use a project root and a work root. The paths below are placeholders.
 
 ```bash
 export PROJECT_ROOT=/path/to/projects
-export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+export WORK_ROOT=/path/to/work/MPAS-BMatrix
 
 mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
 cd "$PROJECT_ROOT"
 
 git clone https://github.com/joaogerd/mpaswf.git
-git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/MPAS-BMatrix.git
 
 export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
-export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export BMATRIX_ROOT="$PROJECT_ROOT/MPAS-BMatrix"
 ```
 
 Install the upstream workflow:
@@ -171,7 +171,7 @@ Its columns are:
 valid_time    f048_state    f024_state    f048_restart    f024_restart
 ```
 
-This file is the hand-off between `mpaswf` and `mpas-bmatrix`.
+This file is the hand-off between `mpaswf` and `MPAS-BMatrix`.
 
 ## 4. Use the `mpaswf` manifest in this package
 
@@ -232,7 +232,7 @@ Maintain this separation between repositories:
 mpaswf
   owns GFS/WPS, MPAS initialization, MPAS forecasts and pair manifest
 
-mpas-bmatrix
+MPAS-BMatrix
   owns BFLOW, VBAL, UNBALANCE, HDIAG, NICAS, SO, DIRAC and PLOTS
 ```
 
