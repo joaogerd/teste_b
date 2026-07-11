@@ -15,6 +15,41 @@ same-valid-time NMC pairs already exist. In the current workflow those upstream
 pairs are generated with the external `mpaswf` workflow, then consumed here to
 prepare perturbations and calibrate the B-matrix products.
 
+## Recommended checkout layout
+
+Use a project area and a separate work area. The paths below are examples; adapt
+only the exported roots for your account, project, or machine.
+
+```bash
+export PROJECT_ROOT=/path/to/projects
+export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+
+mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
+cd "$PROJECT_ROOT"
+
+git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/mpaswf.git
+
+export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
+```
+
+Install both repositories in the environment you will use:
+
+```bash
+python -m pip install --no-deps -e "$MPASWF_ROOT"
+python -m pip install -e "$BMATRIX_ROOT"
+```
+
+On JACI, source the repository-local loader from the B-matrix checkout. The
+loader is path-generic; set `STACK_ROOT` for your spack-stack environment first.
+
+```bash
+cd "$BMATRIX_ROOT"
+export STACK_ROOT=/path/to/spack-stack
+source scripts/load_jaci_env.sh
+```
+
 ## Workflow boundary
 
 ```text
@@ -23,7 +58,7 @@ External upstream:
     -> GFS/WPS/ungrib
     -> mpas_init_atmosphere
     -> MPAS forecasts f024/f048
-    -> same-valid-time NMC forecast pairs
+    -> same-valid-time NMC forecast-pair manifest
 
 This package:
   BFLOW
@@ -50,15 +85,6 @@ in `mpaswf` or another upstream producer. This repository owns the covariance
 product contract, the SABER/BUMP YAML rendering, PBS orchestration, validation
 and diagnostics.
 
-The `mpaswf` hand-off file is:
-
-```text
-<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
-```
-
-A complete guide for producing that manifest is in
-[`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md).
-
 ## Repository layout
 
 ```text
@@ -78,8 +104,8 @@ src/bmatrix/
 
 docs/
   README.md                 # documentation index
+  mpaswf-pairs.md           # upstream pair generation with mpaswf
   workflow.md               # end-to-end workflow and stage ownership
-  mpaswf-pairs.md           # upstream f024/f048 pair generation with mpaswf
   scientific-contract.md    # variables, aliases, B blocks and products
   jaci-quickstart.md        # operational commands on JACI
   diagnostics-and-plots.md  # plot products and visual checks
@@ -92,6 +118,7 @@ docs/
 Install the base package:
 
 ```bash
+cd "$BMATRIX_ROOT"
 python -m pip install -e .
 ```
 
@@ -111,19 +138,20 @@ python -m pip install -e ".[diagnostics]"
 python -m pip install -e ".[dev]"
 ```
 
-On JACI, source the repository-local environment loader before running the workflow:
+Install the upstream MPAS workflow:
 
 ```bash
-source scripts/load_jaci_env.sh
+cd "$MPASWF_ROOT"
+python -m pip install --no-deps -e .
 ```
 
-## Quick start on JACI
+## Quick start
 
 ```bash
-cd /p/projetos/monan_das/joao.gerd/projects/teste_b
+cd "$BMATRIX_ROOT"
 
 CONFIG=configs/jaci-x1.10242.yaml
-BFLOW=/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/bmatrix/bflow_preprocessing/np128_2026062200_2026062500
+BFLOW="$WORK_ROOT/bmatrix/bflow_preprocessing/np128_YYYYMMDDHH_YYYYMMDDHH"
 ```
 
 Validate the merged configuration:
@@ -139,20 +167,6 @@ Run the full B-matrix workflow from an existing BFLOW workspace:
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --config "$CONFIG" \
   --bflow-workspace "$BFLOW" \
-  --clean \
-  --poll-seconds 30
-```
-
-Run the full B-matrix workflow from a freshly generated `mpaswf` manifest:
-
-```bash
-MANIFEST=<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
-
-PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
-  --config "$CONFIG" \
-  --manifest "$MANIFEST" \
-  --from-stage bflow \
-  --to-stage plots \
   --clean \
   --poll-seconds 30
 ```
@@ -204,6 +218,38 @@ Valid stages are:
 ```text
 bflow, vbal, unbalance, hdiag, nicas, so, dirac, plots
 ```
+
+## Generating pairs with mpaswf
+
+Generate MPAS f024/f048 forecasts and the forecast-pair manifest before running
+this package:
+
+```bash
+cd "$MPASWF_ROOT"
+MPASWF_CONFIG=/path/to/mpaswf-config.yaml
+
+mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
+mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase manifest --config "$MPASWF_CONFIG"
+```
+
+Then use the generated manifest in this package:
+
+```bash
+cd "$BMATRIX_ROOT"
+MANIFEST=/path/to/mpaswf-work/products/mpas-forecast-manifest.tsv
+
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
+  --config "$CONFIG" \
+  --manifest "$MANIFEST" \
+  --from-stage bflow \
+  --to-stage plots \
+  --clean \
+  --poll-seconds 30
+```
+
+For details, see [`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md).
 
 ## Scientific products
 
@@ -261,7 +307,7 @@ Keep these rules unless a new audit proves otherwise:
 7. Do not treat `an-bg = 0` for MPAS-native SO output fields as an automatic
    failure.
 8. Keep final NetCDF products in CDF5 when the stage contract requires it.
-9. Do not use `/tmp` for persistent audits or reproducibility logs on JACI.
+9. Do not use `/tmp` for persistent audits or reproducibility logs.
 
 ## PBS progress display
 
@@ -283,7 +329,10 @@ not increase scheduler load.
 Run these before merging documentation or code changes:
 
 ```bash
-TMPDIR=/p/projetos/monan_das/joao.gerd/projects/teste_b/.pytest-tmp \
+cd "$BMATRIX_ROOT"
+mkdir -p .pytest-tmp
+
+TMPDIR="$BMATRIX_ROOT/.pytest-tmp" \
 PYTHONPATH="src:${PYTHONPATH:-}" \
 python -m pytest -p no:cacheprovider -q
 
