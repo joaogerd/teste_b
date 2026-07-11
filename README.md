@@ -1,8 +1,8 @@
-# MPAS-JEDI static B-matrix workflow
+# MPAS-BMatrix
 
-This repository is the Python orchestration package used to build, validate and
-diagnose static MPAS-JEDI/SABER/BUMP background-error covariance products for a
-global MPAS workflow.
+`MPAS-BMatrix` is the official Python orchestration repository for building,
+validating and diagnosing static MPAS-JEDI/SABER/BUMP background-error
+covariance products for a global MPAS workflow.
 
 The package exposes one public command:
 
@@ -59,15 +59,15 @@ only the exported roots for your account, project, or machine.
 
 ```bash
 export PROJECT_ROOT=/path/to/projects
-export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+export WORK_ROOT=/path/to/work/MPAS-BMatrix
 
 mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
 cd "$PROJECT_ROOT"
 
-git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/MPAS-BMatrix.git
 git clone https://github.com/joaogerd/mpaswf.git
 
-export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export BMATRIX_ROOT="$PROJECT_ROOT/MPAS-BMatrix"
 export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
 ```
 
@@ -189,7 +189,7 @@ python -m pip install --no-deps -e .
 cd "$BMATRIX_ROOT"
 
 CONFIG=configs/jaci-x1.10242.yaml
-BFLOW="$WORK_ROOT/bmatrix/bflow_preprocessing/np128_YYYYMMDDHH_YYYYMMDDHH"
+BFLOW="$WORK_ROOT/bmatrix/bflow_preprocessing/np128_<START_VALID>_<END_VALID>"
 ```
 
 Validate the merged configuration:
@@ -222,17 +222,6 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --poll-seconds 30
 ```
 
-Generate only plots from completed products:
-
-```bash
-PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix plots \
-  --config "$CONFIG" \
-  --bflow-workspace "$BFLOW" \
-  --plot-level 30 \
-  --plot-dpi 150 \
-  --clean
-```
-
 ## Main commands
 
 ```bash
@@ -242,13 +231,6 @@ mpas-bmatrix build         --config configs/jaci-x1.10242.yaml --bflow-workspace
 mpas-bmatrix validate      --config configs/jaci-x1.10242.yaml --bflow-workspace <BFLOW> --stage <stage>
 mpas-bmatrix plots         --config configs/jaci-x1.10242.yaml --bflow-workspace <BFLOW>
 mpas-bmatrix products      --config configs/jaci-x1.10242.yaml --bflow-workspace <BFLOW>
-```
-
-Stage selection is explicit and resumable:
-
-```bash
-mpas-bmatrix build --config "$CONFIG" --bflow-workspace "$BFLOW" \
-  --from-stage unbalance --to-stage hdiag --clean
 ```
 
 Valid stages are:
@@ -311,26 +293,6 @@ Core diagnostics:
   PLOTS/summary.csv
 ```
 
-## Variable-name contract
-
-The current MPAS-JEDI/SABER/OOPS code uses canonical names, while many B-matrix
-NetCDF products are stored with historical MPAS/tutorial names. The YAML aliases
-make that mapping explicit:
-
-```yaml
-- in code: air_temperature
-  in file: temperature
-- in code: water_vapor_mixing_ratio_wrt_moist_air
-  in file: spechum
-- in code: air_pressure_at_surface
-  in file: surface_pressure
-```
-
-`in code` is the internal name expected by the new MPAS-JEDI/SABER/OOPS code.
-`in file` is the name present in NetCDF B-matrix products. This alias is for
-JEDI/SABER/BUMP product reading. It is **not** a translation layer for the MPAS
-stream parser. MPAS streams still accept only MPAS Registry fields.
-
 ## Important invariants
 
 Keep these rules unless a new audit proves otherwise:
@@ -346,21 +308,6 @@ Keep these rules unless a new audit proves otherwise:
    failure.
 8. Keep final NetCDF products in CDF5 when the stage contract requires it.
 9. Do not use `/tmp` for persistent audits or reproducibility logs.
-
-## PBS progress display
-
-Interactive PBS runs use a compact colored spinner with job ID, PBS state,
-elapsed time and next `qstat` poll. Redirected output falls back to persistent
-`[RUN]` log lines.
-
-```bash
-MPAS_BMATRIX_COLOR=always mpas-bmatrix build ...
-MPAS_BMATRIX_COLOR=never  mpas-bmatrix build ...
-NO_COLOR=1                mpas-bmatrix build ...
-```
-
-The scheduler cadence is still controlled by `--poll-seconds`; the spinner does
-not increase scheduler load.
 
 ## Development checks
 
