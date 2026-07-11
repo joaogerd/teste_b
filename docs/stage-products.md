@@ -123,7 +123,7 @@ ncdump -h "$UNBALANCE/samplesUnbalanced/PTB_f48mf24_001.nc" | head
 ```
 
 Do not run HDIAG from raw PTB files when the configured workflow expects
-` samplesUnbalanced`.
+`samplesUnbalanced`.
 
 ### HDIAG
 
