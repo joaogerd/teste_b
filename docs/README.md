@@ -29,20 +29,38 @@ forecast integration. In the current operational chain those upstream products
 are generated with `mpaswf`, then passed into this package as NMC pairs or an
 already prepared BFLOW workspace.
 
+## Recommended checkout layout
+
+Use generic roots and adapt only the exports to your system:
+
+```bash
+export PROJECT_ROOT=/path/to/projects
+export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+
+mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
+cd "$PROJECT_ROOT"
+
+git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/mpaswf.git
+
+export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
+```
+
 ## Current validated case
 
-The documentation assumes the global MPAS tutorial mesh and JACI paths declared
-in:
+The documentation assumes the global MPAS tutorial mesh and the scientific
+contract declared in:
 
 ```text
 configs/jaci-x1.10242.yaml
 configs/bmatrix-x1.10242.yaml
 ```
 
-The validated BFLOW workspace used during development was:
+A typical BFLOW workspace path follows this pattern:
 
 ```text
-/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/bmatrix/bflow_preprocessing/np128_2026062200_2026062500
+$WORK_ROOT/bmatrix/bflow_preprocessing/np128_<START_VALID>_<END_VALID>
 ```
 
-Use the same contract when comparing outputs or debugging stage regressions.
+Use the same stage contract when comparing outputs or debugging regressions.
