@@ -1,8 +1,8 @@
-# mpas-bmatrix-global
+# MPAS-JEDI static B-matrix workflow
 
-`mpas-bmatrix-global` is the Python orchestration package used to build and
-validate static MPAS-JEDI/SABER/BUMP background-error covariance products for
-the global MPAS `x1.10242` case on JACI.
+This repository is the Python orchestration package used to build, validate and
+diagnose static MPAS-JEDI/SABER/BUMP background-error covariance products for a
+global MPAS workflow.
 
 The package exposes one public command:
 
@@ -10,10 +10,47 @@ The package exposes one public command:
 mpas-bmatrix
 ```
 
-The package starts at the **BFLOW** boundary. It assumes that MPAS forecasts and
-same-valid-time NMC pairs already exist. In the current workflow those upstream
-pairs are generated with the external `mpaswf` workflow, then consumed here to
-prepare perturbations and calibrate the B-matrix products.
+The repository starts at the **BFLOW** boundary. It assumes that MPAS forecasts
+and same-valid-time NMC pairs already exist. In the current workflow those
+upstream pairs are generated with the external `mpaswf` workflow, then consumed
+here to prepare perturbations and calibrate the B-matrix products.
+
+## What the B-matrix represents
+
+In variational data assimilation, the background-error covariance matrix `B`
+controls how observational information spreads from the observation location into
+the analysis state:
+
+```text
+- horizontally;
+- vertically;
+- between variables;
+- with a prescribed/statistically estimated amplitude.
+```
+
+In MPAS-JEDI/SABER, the static B is represented by operators and files rather
+than by one dense matrix:
+
+```text
+B ≈ C2A · VBAL · StdDev · NICAS · StdDev · VBALᵀ · C2Aᵀ
+```
+
+where `NICAS` represents spatial correlations, `StdDev` represents error
+amplitudes, `VBAL` represents vertical/multivariate balance, and `C2A` is the
+`Control2Analysis` variable change.
+
+The complete workflow is:
+
+```text
+mpaswf -> BFLOW -> VBAL -> UNBALANCE -> HDIAG -> NICAS -> SO -> DIRAC -> PLOTS
+```
+
+`UNBALANCE` is intentionally explicit in this repository: VBAL calibrates the
+balance transform, UNBALANCE writes the unbalanced training members, and HDIAG
+uses those members for the statistics.
+
+For the scientific explanation of each stage, see
+[`docs/bmatrix-theory.md`](docs/bmatrix-theory.md).
 
 ## Recommended checkout layout
 
@@ -89,7 +126,7 @@ and diagnostics.
 
 ```text
 configs/
-  jaci-x1.10242.yaml        # JACI paths, mesh, executables, PBS and environment
+  jaci-x1.10242.yaml        # platform paths, mesh, executables, PBS and environment
   bmatrix-x1.10242.yaml     # scientific B-matrix contract
 
 scripts/
@@ -104,10 +141,11 @@ src/bmatrix/
 
 docs/
   README.md                 # documentation index
+  bmatrix-theory.md         # theory and meaning of each stage
   mpaswf-pairs.md           # upstream pair generation with mpaswf
   workflow.md               # end-to-end workflow and stage ownership
   scientific-contract.md    # variables, aliases, B blocks and products
-  jaci-quickstart.md        # operational commands on JACI
+  jaci-quickstart.md        # generic JACI commands
   diagnostics-and-plots.md  # plot products and visual checks
   operations.md             # validation, provenance and troubleshooting
   refactoring.md            # implementation notes from the refactor
@@ -343,8 +381,10 @@ git diff --check
 
 ## Documentation
 
-Start with [`docs/README.md`](docs/README.md). For the full operational flow,
-read [`docs/workflow.md`](docs/workflow.md), [`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md)
-and [`docs/jaci-quickstart.md`](docs/jaci-quickstart.md). For variable names,
+Start with [`docs/README.md`](docs/README.md) and
+[`docs/bmatrix-theory.md`](docs/bmatrix-theory.md). For the full operational
+flow, read [`docs/workflow.md`](docs/workflow.md),
+[`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md) and
+[`docs/jaci-quickstart.md`](docs/jaci-quickstart.md). For variable names,
 aliases and SABER/BUMP contracts, read
 [`docs/scientific-contract.md`](docs/scientific-contract.md).
