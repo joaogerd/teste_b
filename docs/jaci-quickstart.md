@@ -17,14 +17,56 @@ CONFIG=configs/jaci-x1.10242.yaml
 BFLOW=/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/bmatrix/bflow_preprocessing/np128_2026062200_2026062500
 ```
 
-## 2. Check the resolved configuration
+## 2. Generate upstream pairs with `mpaswf` when needed
+
+Use this step only when the BFLOW workspace does not already exist or when the
+NMC forecast pairs need to be regenerated.
+
+```bash
+cd /p/projetos/monan_das/joao.gerd/projects/mpaswf
+
+MPASWF_CONFIG=/path/to/mpaswf-config.yaml
+
+mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
+mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase manifest --config "$MPASWF_CONFIG"
+```
+
+The hand-off file is:
+
+```text
+<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+```
+
+Return to this repository and build from the manifest:
+
+```bash
+cd /p/projetos/monan_das/joao.gerd/projects/teste_b
+source scripts/load_jaci_env.sh
+
+CONFIG=configs/jaci-x1.10242.yaml
+MANIFEST=<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
+  --config "$CONFIG" \
+  --manifest "$MANIFEST" \
+  --from-stage bflow \
+  --to-stage plots \
+  --clean \
+  --poll-seconds 30
+```
+
+For the full upstream procedure, see [`mpaswf-pairs.md`](mpaswf-pairs.md).
+
+## 3. Check the resolved configuration
 
 ```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix check-config \
   --config "$CONFIG"
 ```
 
-## 3. Run selected stages
+## 4. Run selected stages
 
 Only UNBALANCE:
 
@@ -111,7 +153,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --poll-seconds 10
 ```
 
-## 4. Validate completed products
+## 5. Validate completed products
 
 ```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix validate \
@@ -125,7 +167,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix validate \
   --stage dirac
 ```
 
-## 5. Generate plots only
+## 6. Generate plots only
 
 ```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix plots \
@@ -136,7 +178,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix plots \
   --clean
 ```
 
-## 6. Development checks
+## 7. Development checks
 
 Always run:
 
