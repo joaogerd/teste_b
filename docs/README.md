@@ -9,6 +9,7 @@ B-matrix products from already generated NMC forecast pairs.
 | Document | Purpose |
 | --- | --- |
 | [`workflow.md`](workflow.md) | End-to-end ownership from external `mpaswf` pairs to B-matrix products. |
+| [`mpaswf-pairs.md`](mpaswf-pairs.md) | How to generate f024/f048 MPAS NMC forecast pairs and the manifest with `mpaswf`. |
 | [`scientific-contract.md`](scientific-contract.md) | Variable names, aliases, SABER/BUMP blocks, `Control2Analysis`, UNBALANCE and DIRAC contract. |
 | [`jaci-quickstart.md`](jaci-quickstart.md) | Commands for the validated JACI x1.10242 workflow. |
 | [`diagnostics-and-plots.md`](diagnostics-and-plots.md) | Plot products, visual diagnostics and style conventions. |
