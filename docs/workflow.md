@@ -23,6 +23,42 @@ GFS GRIB2
 The B-matrix package does not rerun this meteorological workflow. It consumes
 the results as a manifest or as an already prepared BFLOW workspace.
 
+The `mpaswf` public phases are:
+
+```bash
+mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
+mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase manifest --config "$MPASWF_CONFIG"
+```
+
+The manifest produced by `mpaswf` is the upstream hand-off file:
+
+```text
+<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+```
+
+It contains one row per same-valid-time pair and uses these columns:
+
+```text
+valid_time    f048_state    f024_state    f048_restart    f024_restart
+```
+
+This package can start from that manifest:
+
+```bash
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
+  --config "$CONFIG" \
+  --manifest "$MANIFEST" \
+  --from-stage bflow \
+  --to-stage plots \
+  --clean \
+  --poll-seconds 30
+```
+
+For the complete upstream procedure, including MPASWF configuration and PBS
+execution patterns, see [`mpaswf-pairs.md`](mpaswf-pairs.md).
+
 Keep this separation:
 
 ```text
