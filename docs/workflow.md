@@ -2,6 +2,39 @@
 
 This document describes the operational flow represented by the `main` branch.
 
+## 0. Checkout layout
+
+Use generic roots and adapt only these exports to the local system:
+
+```bash
+export PROJECT_ROOT=/path/to/projects
+export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+
+mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
+cd "$PROJECT_ROOT"
+
+git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/mpaswf.git
+
+export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
+```
+
+Install the repositories in the active Python environment:
+
+```bash
+python -m pip install --no-deps -e "$MPASWF_ROOT"
+python -m pip install -e "$BMATRIX_ROOT"
+```
+
+On JACI, load the MPAS-JEDI environment from the B-matrix checkout:
+
+```bash
+cd "$BMATRIX_ROOT"
+export STACK_ROOT=/path/to/spack-stack
+source scripts/load_jaci_env.sh
+```
+
 ## 1. Upstream pair generation
 
 The NMC forecast pairs are generated before this package starts. The operational
@@ -17,47 +50,19 @@ GFS GRIB2
   -> MPAS initial conditions
   -> MPAS atmosphere forecasts f024 and f048
   -> same-valid-time forecast pair
-  -> NMC difference f048 - f024
+  -> forecast-pair manifest
+```
+
+For each valid time `T`, the NMC pair is:
+
+```text
+f048 initialized at T - 48 h
+minus
+f024 initialized at T - 24 h
 ```
 
 The B-matrix package does not rerun this meteorological workflow. It consumes
 the results as a manifest or as an already prepared BFLOW workspace.
-
-The `mpaswf` public phases are:
-
-```bash
-mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
-mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
-mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
-mpaswf run --phase manifest --config "$MPASWF_CONFIG"
-```
-
-The manifest produced by `mpaswf` is the upstream hand-off file:
-
-```text
-<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
-```
-
-It contains one row per same-valid-time pair and uses these columns:
-
-```text
-valid_time    f048_state    f024_state    f048_restart    f024_restart
-```
-
-This package can start from that manifest:
-
-```bash
-PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
-  --config "$CONFIG" \
-  --manifest "$MANIFEST" \
-  --from-stage bflow \
-  --to-stage plots \
-  --clean \
-  --poll-seconds 30
-```
-
-For the complete upstream procedure, including MPASWF configuration and PBS
-execution patterns, see [`mpaswf-pairs.md`](mpaswf-pairs.md).
 
 Keep this separation:
 
@@ -70,6 +75,24 @@ mpas-bmatrix BFLOW
 
 SABER/BUMP stages
   calibrate, validate and diagnose the static B-matrix
+```
+
+A generic upstream run is:
+
+```bash
+cd "$MPASWF_ROOT"
+MPASWF_CONFIG=/path/to/mpaswf-config.yaml
+
+mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
+mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
+mpaswf run --phase manifest --config "$MPASWF_CONFIG"
+```
+
+The hand-off file is:
+
+```text
+/path/to/mpaswf-work/products/mpas-forecast-manifest.tsv
 ```
 
 ## 2. BFLOW
@@ -97,6 +120,28 @@ BFLOW uses the scientific contract in `configs/bmatrix-x1.10242.yaml`:
   potential.
 - `bflow.derived_variables` creates analysis/control variables such as air
   temperature and specific humidity from MPAS-native fields.
+
+Build BFLOW from the `mpaswf` manifest:
+
+```bash
+cd "$BMATRIX_ROOT"
+CONFIG=configs/jaci-x1.10242.yaml
+MANIFEST=/path/to/mpaswf-work/products/mpas-forecast-manifest.tsv
+
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
+  --config "$CONFIG" \
+  --manifest "$MANIFEST" \
+  --from-stage bflow \
+  --to-stage bflow \
+  --clean \
+  --poll-seconds 30
+```
+
+After BFLOW exists, later runs can resume from an explicit BFLOW workspace:
+
+```bash
+BFLOW="$WORK_ROOT/bmatrix/bflow_preprocessing/np128_<START_VALID>_<END_VALID>"
+```
 
 ## 3. VBAL
 
