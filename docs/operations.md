@@ -30,10 +30,11 @@ Prepared or completed stages write `stage-manifest.json` where available. These
 manifests are the operational provenance record and should be treated as more
 reliable than ad hoc README files inside workspaces.
 
-Record audits under:
+Record audits under a durable work directory, for example:
 
-```text
-/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/audits/
+```bash
+AUDIT_DIR="$WORK_ROOT/audits"
+mkdir -p "$AUDIT_DIR"
 ```
 
 Do not rely on `/tmp` for persistent reports because it may be inaccessible from
@@ -121,7 +122,10 @@ mpas-bmatrix products --config "$CONFIG" --bflow-workspace "$BFLOW"
 Inspect important outputs:
 
 ```bash
-ncdump -h "$SO/an.2026-06-22_00.00.00.nc" | \
+SO=/path/to/so/workspace
+DIRAC=/path/to/dirac/workspace
+
+ncdump -h "$SO/an.YYYY-MM-DD_HH.MM.SS.nc" | \
   egrep 'uReconstructZonal|uReconstructMeridional|theta|qv|surface_pressure'
 
 ncdump -k "$DIRAC/mpas.dirac.nc"
@@ -132,7 +136,10 @@ ncdump -k "$DIRAC/mpas.dirac.nc"
 Before merging:
 
 ```bash
-TMPDIR=/p/projetos/monan_das/joao.gerd/projects/teste_b/.pytest-tmp \
+cd "$BMATRIX_ROOT"
+mkdir -p .pytest-tmp
+
+TMPDIR="$BMATRIX_ROOT/.pytest-tmp" \
 PYTHONPATH="src:${PYTHONPATH:-}" \
 python -m pytest -p no:cacheprovider -q
 
