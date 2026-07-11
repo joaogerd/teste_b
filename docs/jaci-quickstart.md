@@ -1,53 +1,67 @@
 # JACI quick start
 
-This page gives the command sequence used for the validated global `x1.10242`
-case on JACI.
+This page gives a generic command sequence for the global `x1.10242` case on
+JACI. Replace only the exported roots for your account/project.
 
-## 1. Load the environment
+## 1. Clone the required repositories
 
 ```bash
-cd /p/projetos/monan_das/joao.gerd/projects/teste_b
+export PROJECT_ROOT=/path/to/projects
+export WORK_ROOT=/path/to/work/mpas-bmatrix-global
+
+mkdir -p "$PROJECT_ROOT" "$WORK_ROOT"
+cd "$PROJECT_ROOT"
+
+git clone https://github.com/joaogerd/teste_b.git
+git clone https://github.com/joaogerd/mpaswf.git
+
+export BMATRIX_ROOT="$PROJECT_ROOT/teste_b"
+export MPASWF_ROOT="$PROJECT_ROOT/mpaswf"
+```
+
+Install the Python packages in the active environment:
+
+```bash
+python -m pip install --no-deps -e "$MPASWF_ROOT"
+python -m pip install -e "$BMATRIX_ROOT"
+```
+
+## 2. Load the MPAS-JEDI environment
+
+The repository includes a path-generic JACI loader. Set `STACK_ROOT` to the root
+of the spack-stack environment available on your system.
+
+```bash
+cd "$BMATRIX_ROOT"
+export STACK_ROOT=/path/to/spack-stack
 source scripts/load_jaci_env.sh
 ```
 
-Set the standard inputs:
+## 3. Set common inputs
+
+For an existing BFLOW workspace:
 
 ```bash
 CONFIG=configs/jaci-x1.10242.yaml
-BFLOW=/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/bmatrix/bflow_preprocessing/np128_2026062200_2026062500
+BFLOW="$WORK_ROOT/bmatrix/bflow_preprocessing/np128_<START_VALID>_<END_VALID>"
 ```
 
-## 2. Generate upstream pairs with `mpaswf` when needed
-
-Use this step only when the BFLOW workspace does not already exist or when the
-NMC forecast pairs need to be regenerated.
+For a fresh run from `mpaswf` pairs:
 
 ```bash
-cd /p/projetos/monan_das/joao.gerd/projects/mpaswf
-
-MPASWF_CONFIG=/path/to/mpaswf-config.yaml
-
-mpaswf run --phase prepare  --config "$MPASWF_CONFIG"
-mpaswf run --phase init     --config "$MPASWF_CONFIG" --submit --wait
-mpaswf run --phase forecast --config "$MPASWF_CONFIG" --submit --wait
-mpaswf run --phase manifest --config "$MPASWF_CONFIG"
+MANIFEST=/path/to/mpaswf-work/products/mpas-forecast-manifest.tsv
 ```
 
-The hand-off file is:
-
-```text
-<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
-```
-
-Return to this repository and build from the manifest:
+## 4. Check the resolved configuration
 
 ```bash
-cd /p/projetos/monan_das/joao.gerd/projects/teste_b
-source scripts/load_jaci_env.sh
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix check-config \
+  --config "$CONFIG"
+```
 
-CONFIG=configs/jaci-x1.10242.yaml
-MANIFEST=<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+## 5. Build from a `mpaswf` manifest
 
+```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --config "$CONFIG" \
   --manifest "$MANIFEST" \
@@ -57,16 +71,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --poll-seconds 30
 ```
 
-For the full upstream procedure, see [`mpaswf-pairs.md`](mpaswf-pairs.md).
-
-## 3. Check the resolved configuration
-
-```bash
-PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix check-config \
-  --config "$CONFIG"
-```
-
-## 4. Run selected stages
+## 6. Run selected stages from an existing BFLOW workspace
 
 Only UNBALANCE:
 
@@ -107,6 +112,9 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
 SO only after NICAS is valid:
 
 ```bash
+AUDIT_DIR="$WORK_ROOT/audits"
+mkdir -p "$AUDIT_DIR"
+
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --config "$CONFIG" \
   --bflow-workspace "$BFLOW" \
@@ -114,12 +122,15 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --to-stage so \
   --clean \
   --poll-seconds 10 \
-  2>&1 | tee /p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/audits/so_latest.log
+  2>&1 | tee "$AUDIT_DIR/so_latest.log"
 ```
 
 DIRAC only after SO and NICAS are valid:
 
 ```bash
+AUDIT_DIR="$WORK_ROOT/audits"
+mkdir -p "$AUDIT_DIR"
+
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --config "$CONFIG" \
   --bflow-workspace "$BFLOW" \
@@ -127,7 +138,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --to-stage dirac \
   --clean \
   --poll-seconds 10 \
-  2>&1 | tee /p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/audits/dirac_latest.log
+  2>&1 | tee "$AUDIT_DIR/dirac_latest.log"
 ```
 
 Full workflow through DIRAC:
@@ -153,7 +164,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --poll-seconds 10
 ```
 
-## 5. Validate completed products
+## 7. Validate completed products
 
 ```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix validate \
@@ -167,7 +178,7 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix validate \
   --stage dirac
 ```
 
-## 6. Generate plots only
+## 8. Generate plots only
 
 ```bash
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix plots \
@@ -178,12 +189,15 @@ PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix plots \
   --clean
 ```
 
-## 7. Development checks
+## 9. Development checks
 
 Always run:
 
 ```bash
-TMPDIR=/p/projetos/monan_das/joao.gerd/projects/teste_b/.pytest-tmp \
+cd "$BMATRIX_ROOT"
+mkdir -p .pytest-tmp
+
+TMPDIR="$BMATRIX_ROOT/.pytest-tmp" \
 PYTHONPATH="src:${PYTHONPATH:-}" \
 python -m pytest -p no:cacheprovider -q
 
@@ -192,8 +206,9 @@ python -m ruff check src/bmatrix tests
 git diff --check
 ```
 
-Avoid writing persistent audit files to `/tmp`. Use:
+Avoid writing persistent audit files to `/tmp`. Use a durable project work area,
+for example:
 
 ```text
-/p/projetos/monan_das/joao.gerd/work/mpas-bmatrix-global/audits/
+$WORK_ROOT/audits/
 ```
