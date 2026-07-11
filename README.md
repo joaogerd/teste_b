@@ -50,6 +50,15 @@ in `mpaswf` or another upstream producer. This repository owns the covariance
 product contract, the SABER/BUMP YAML rendering, PBS orchestration, validation
 and diagnostics.
 
+The `mpaswf` hand-off file is:
+
+```text
+<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+```
+
+A complete guide for producing that manifest is in
+[`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md).
+
 ## Repository layout
 
 ```text
@@ -70,6 +79,7 @@ src/bmatrix/
 docs/
   README.md                 # documentation index
   workflow.md               # end-to-end workflow and stage ownership
+  mpaswf-pairs.md           # upstream f024/f048 pair generation with mpaswf
   scientific-contract.md    # variables, aliases, B blocks and products
   jaci-quickstart.md        # operational commands on JACI
   diagnostics-and-plots.md  # plot products and visual checks
@@ -129,6 +139,20 @@ Run the full B-matrix workflow from an existing BFLOW workspace:
 PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
   --config "$CONFIG" \
   --bflow-workspace "$BFLOW" \
+  --clean \
+  --poll-seconds 30
+```
+
+Run the full B-matrix workflow from a freshly generated `mpaswf` manifest:
+
+```bash
+MANIFEST=<mpaswf work_dir>/products/mpas-forecast-manifest.tsv
+
+PYTHONPATH="src:${PYTHONPATH:-}" python -m bmatrix build \
+  --config "$CONFIG" \
+  --manifest "$MANIFEST" \
+  --from-stage bflow \
+  --to-stage plots \
   --clean \
   --poll-seconds 30
 ```
@@ -271,7 +295,7 @@ git diff --check
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). For the full operational flow,
-read [`docs/workflow.md`](docs/workflow.md) and
-[`docs/jaci-quickstart.md`](docs/jaci-quickstart.md). For variable names,
+read [`docs/workflow.md`](docs/workflow.md), [`docs/mpaswf-pairs.md`](docs/mpaswf-pairs.md)
+and [`docs/jaci-quickstart.md`](docs/jaci-quickstart.md). For variable names,
 aliases and SABER/BUMP contracts, read
 [`docs/scientific-contract.md`](docs/scientific-contract.md).
